@@ -1134,7 +1134,8 @@ static int bi_help(void)
         {"monitor [sec] | once",  "LIVE CPU / RAM / process dashboard from /proc (q quits)"},
         {"mode-switch",           "toggle simulated privilege level (Ring 3 <-> Ring 0)"},
         {"theme <name>",          "retro, cyber, matrix, dracula"},
-        {"clear",                 "clear the screen"},
+        {"fastfetch",             "display the Cyber Purple Cat & system specs"},
+        {"clear",                 "clear the screen and history"},
         {"exit [code]",           "leave the shell"},
     };
     printf("\n"); set_fg(CYAN); printf(BOLD "RetroOS built-in commands:\n" RESET);
@@ -1976,7 +1977,7 @@ static int bi_monitor(int argc, char **argv)
 }
 
 static const char *BUILTIN_NAMES[] = {
-    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "export", "unset", "jobs", "history", "user", "welcome", "exit", "quit", NULL
+    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
 };
 
 static int is_builtin(const char *name)
@@ -1998,7 +1999,8 @@ static int run_builtin(int argc, char **argv, int *status)
     else if (strcmp(c, "mode-switch") == 0) *status = bi_mode_switch();
     else if (strcmp(c, "sched") == 0)       *status = bi_sched(argc, argv);
     else if (strcmp(c, "monitor") == 0)     *status = bi_monitor(argc, argv);
-    else if (strcmp(c, "clear") == 0)       { printf("\x1b[2J\x1b[H"); *status = 0; }
+    else if (strcmp(c, "clear") == 0)       { printf("\x1b[H\x1b[2J\x1b[3J"); fflush(stdout); *status = 0; }
+    else if (strcmp(c, "fastfetch") == 0 || strcmp(c, "fetch") == 0) { print_banner(); fflush(stdout); *status = 0; }
     else if (strcmp(c, "export") == 0)      *status = bi_export(argc, argv);
     else if (strcmp(c, "unset") == 0)       *status = bi_unset(argc, argv);
     else if (strcmp(c, "jobs") == 0)        *status = bi_jobs();
