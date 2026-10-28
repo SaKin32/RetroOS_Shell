@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>RetroOS Terminal</title>
+<link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+<style>
+  @font-face { font-family:"RetroNerd"; src:url("fonts/Regular.ttf"); font-weight:400; }
+  @font-face { font-family:"RetroNerd"; src:url("fonts/Bold.ttf"); font-weight:700; }
+  :root { 
+    --purple: #c084fc; 
+    --purple-light: #e9d5ff;
+    --dim: #27272a; 
+    --title-bg: #09090b; 
+    --bg: #000000; 
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); overflow:hidden; }
+  body { display:flex; flex-direction:column; border:1px solid var(--dim); }
+
+  #titlebar {
+    height:34px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+    background:var(--title-bg); border-bottom:1px solid var(--dim);
+    -webkit-app-region: drag; user-select:none;
+    font-family:"Cascadia Mono",Consolas,monospace; font-size:13px; color:var(--purple);
+  }
+  #title { 
+    text-align:center; letter-spacing:.8px; font-weight:600; 
+    display:flex; align-items:center; justify-content:center; gap:12px; 
+    color:#e9d5ff; text-shadow:0 0 10px rgba(192,132,252,0.3); 
+  }
+  
+  /* Font size controls in titlebar */
+  #font-controls {
+    display:inline-flex; align-items:center; gap:3px;
+    background:#18181b; border:1px solid #3f3f46; border-radius:4px;
+    padding:1px 4px; font-size:11px; font-weight:normal;
+    -webkit-app-region: no-drag;
+  }
+  #font-controls button {
+    background:transparent; border:0; color:#a1a1aa; font:inherit;
+    font-size:11px; cursor:pointer; padding:1px 4px; border-radius:2px;
+    transition:color 0.1s, background 0.1s;
+  }
+  #font-controls button:hover { background:#27272a; color:#f4f4f5; }
+  #font-val { min-width:28px; text-align:center; color:#c084fc; cursor:pointer; }
+  #font-val:hover { text-decoration:underline; }
+
+  #dots { display:flex; gap:8px; padding-left:12px; -webkit-app-region: no-drag; justify-self:start; }
+  #dots button { width:13px; height:13px; padding:0; border:0; border-radius:50%; cursor:pointer; transition:transform 0.15s ease; }
+  #dots button:hover { filter:brightness(1.25); transform:scale(1.1); }
+  #dots button:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+  #dots .red { background:#ff5f57; } #dots .yellow { background:#febc2e; } #dots .green { background:#28c840; }
+  
+  /* Colored window control buttons: - [] X */
+  #buttons { display:flex; height:100%; -webkit-app-region: no-drag; justify-self:end; }
+  #buttons button {
+    width:44px; height:100%; background:transparent; border:0; border-left:1px solid var(--dim);
+    font:inherit; font-size:13px; font-weight:bold; cursor:pointer; transition:background 0.15s, color 0.15s;
+  }
+  #buttons button#min {
+    color:#38bdf8; /* Sky Cyan for - */
+  }
+  #buttons button#min:hover {
+    background:rgba(56, 189, 248, 0.2); color:#e0f2fe;
+  }
+  #buttons button#max {
+    color:#4ade80; /* Emerald Green for [] */
+  }
+  #buttons button#max:hover {
+    background:rgba(74, 222, 128, 0.2); color:#dcfce7;
+  }
+  #buttons button#close {
+    color:#f87171; /* Rose Red for X */
+  }
+  #buttons button#close:hover {
+    background:#ef4444; color:#ffffff;
+  }
+  #buttons button:focus-visible { outline:2px solid var(--purple); outline-offset:-3px; }
+
+  /* Pure Pitch Black Terminal */
+  #terminal { flex:1; padding:6px 8px; min-height:0; position:relative; background:var(--bg); }
+
+  /* CRT Scanlines subtle effect */
+  #terminal::after {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(192,132,252,0.02) 3px);
+  }
+
+  /* Black & purple scrollbar */
+  .xterm-viewport { scrollbar-width: thin; scrollbar-color: #3b1968 var(--bg); }
+  .xterm-viewport::-webkit-scrollbar { width:8px; }
+  .xterm-viewport::-webkit-scrollbar-track { background:var(--bg); }
+  .xterm-viewport::-webkit-scrollbar-thumb { background:#2d1250; border-radius:3px; }
+  .xterm-viewport::-webkit-scrollbar-thumb:hover { background:#6b21a8; }
+  .xterm .xterm-viewport { background-color:var(--bg) !important; }
+</style>
+</head>
+<body>
+  <div id="titlebar">
+    <div id="dots">
+      <button class="red" id="d-close" aria-label="Close"></button>
+      <button class="yellow" id="d-min" aria-label="Minimize"></button>
+      <button class="green" id="d-max" aria-label="Maximize"></button>
+    </div>
+    <div id="title">
+      <span>RetroOS Terminal</span>
+      <div id="font-controls" title="Font Size: Click +/- or use Ctrl + / -">
+        <button id="font-dec" aria-label="Decrease Font Size">A-</button>
+        <span id="font-val" title="Click to reset font size">15px</span>
+        <button id="font-inc" aria-label="Increase Font Size">A+</button>
+      </div>
+    </div>
+    <div id="buttons">
+      <button id="min" aria-label="Minimize" title="Minimize">−</button>
+      <button id="max" aria-label="Maximize" title="Maximize">[]</button>
+      <button id="close" aria-label="Close" title="Close">✕</button>
+    </div>
+  </div>
+  <div id="terminal"></div>
+
+<script>
+  const { ipcRenderer } = require('electron');
+  const { Terminal } = require('@xterm/xterm');
+  const { FitAddon } = require('@xterm/addon-fit');
+
+  // Load saved font size or default to 15
+  let currentFontSize = parseInt(localStorage.getItem('retro_font_size'), 10) || 15;
+  if (currentFontSize < 10 || currentFontSize > 36) currentFontSize = 15;
+
+  const fontValEl = document.getElementById('font-val');
+  function updateFontBadge() {
+    fontValEl.textContent = currentFontSize + 'px';
+  }
+  updateFontBadge();
+
+  const term = new Terminal({
+    fontFamily: '"RetroNerd","Cascadia Mono",Consolas,monospace',
+    fontSize: currentFontSize,
+    cursorBlink: true,
+    allowProposedApi: true,
+    theme: {
+      background: '#000000',
+      foreground: '#f3e8ff',
+      cursor: '#c084fc',
+      selectionBackground: '#38165e'
+    }
+  });
+
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+
+  Promise.all([
+    document.fonts.load('15px RetroNerd'),
+    document.fonts.load('bold 15px RetroNerd')
+  ]).catch(() => {}).then(() => {
+    term.open(document.getElementById('terminal'));
+    fit.fit();
+    ipcRenderer.send('pty-start', { cols: term.cols, rows: term.rows });
+    term.focus();
+  });
+
+  ipcRenderer.on('pty-data', (e, d) => term.write(d));
+  term.onData((d) => ipcRenderer.send('pty-input', d));
+
+  function doFit() {
+    fit.fit();
+    ipcRenderer.send('pty-resize', { cols: term.cols, rows: term.rows });
+  }
+  window.addEventListener('resize', doFit);
+
+  function changeFontSize(delta) {
+    const next = Math.min(36, Math.max(10, currentFontSize + delta));
+    if (next !== currentFontSize) {
+      currentFontSize = next;
+      localStorage.setItem('retro_font_size', currentFontSize);
+      term.options.fontSize = currentFontSize;
+      updateFontBadge();
+      doFit();
+    }
+  }
+
+  function resetFontSize() {
+    currentFontSize = 15;
+    localStorage.setItem('retro_font_size', currentFontSize);
+    term.options.fontSize = currentFontSize;
+    updateFontBadge();
+    doFit();
+  }
+
+  document.getElementById('font-dec').onclick = () => changeFontSize(-1);
+  document.getElementById('font-inc').onclick = () => changeFontSize(+1);
+  fontValEl.onclick = () => resetFontSize();
+
+  // Ctrl + Mouse Wheel zoom in/out
+  document.getElementById('terminal').addEventListener('wheel', (ev) => {
+    if (ev.ctrlKey) {
+      ev.preventDefault();
+      changeFontSize(ev.deltaY < 0 ? 1 : -1);
+    }
+  }, { passive: false });
+
+  // Keyboard Shortcuts:
+  // - Ctrl + Shift + N = New Window
+  // - Ctrl + Shift + C / V = Copy / Paste
+  // - Ctrl + = or Ctrl + + (or NumpadAdd) = Font Zoom In
+  // - Ctrl + - (or NumpadSubtract) = Font Zoom Out
+  // - Ctrl + 0 = Reset Font
+  term.attachCustomKeyEventHandler((ev) => {
+    if (ev.type === 'keydown') {
+      if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyN') {
+        ipcRenderer.send('new-window'); return false;
+      }
+      if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyC') {
+        navigator.clipboard.writeText(term.getSelection()); return false;
+      }
+      if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyV') {
+        navigator.clipboard.readText().then((t) => ipcRenderer.send('pty-input', t)); return false;
+      }
+      // Font zoom keys
+      if (ev.ctrlKey && (ev.key === '=' || ev.key === '+' || ev.code === 'NumpadAdd')) {
+        changeFontSize(1); return false;
+      }
+      if (ev.ctrlKey && (ev.key === '-' || ev.key === '_' || ev.code === 'NumpadSubtract')) {
+        changeFontSize(-1); return false;
+      }
+      if (ev.ctrlKey && (ev.key === '0' || ev.code === 'Numpad0')) {
+        resetFontSize(); return false;
+      }
+    }
+    return true;
+  });
+
+  // Window buttons
+  document.getElementById('min').onclick = () => ipcRenderer.send('win-min');
+  document.getElementById('max').onclick = () => ipcRenderer.send('win-max');
+  document.getElementById('close').onclick = () => ipcRenderer.send('win-close');
+  document.getElementById('d-close').onclick = () => ipcRenderer.send('win-close');
+  document.getElementById('d-min').onclick = () => ipcRenderer.send('win-min');
+  document.getElementById('d-max').onclick = () => ipcRenderer.send('win-max');
+</script>
+</body>
+</html>

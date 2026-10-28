@@ -1,0 +1,15 @@
+# Node dependencies
+node_modules/
+
+# C binaries & build artifacts
+retroshell
+retroshell.exe
+*.o
+*.obj
+
+# User profiles & temporary files
+.retroshell_user
+*.bak
+*.Zone.Identifier
+.DS_Store
+Thumbs.db
