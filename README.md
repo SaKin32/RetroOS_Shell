@@ -130,10 +130,10 @@ npm start
 
 | Command | Usage | Description |
 | :--- | :--- | :--- |
-| `welcome` | `welcome` | Opens Page 1 Welcome & Setup screen (press Enter to return) |
+| `welcome` | `welcome` | Opens Welcome & Setup screen (press Enter to return) |
 | `user` | `user [name]` | View or change your `@retros` identity |
 | `theme` | `theme <cyber\|dracula\|matrix\|retro>` | Switch terminal accent theme colors |
-| `monitor` | `monitor [sec]` | Real-time CPU, RAM, and process monitoring dashboard |
+| `monitor` | `monitor [sec]` | Real-time CPU, RAM and process monitoring dashboard |
 | `sched` | `sched fcfs 0:5 1:3 2:8` | Run FCFS CPU scheduling algorithm with ASCII Gantt chart |
 | `sched real` | `sched real rr 0.5 "burn 2" "burn 1"` | Real process scheduling benchmark with live preemption |
 | `mode-switch` | `mode-switch` | Toggle simulated Ring 3 User and Ring 0 Kernel modes |
@@ -170,5 +170,5 @@ retroos-terminal/
 
 ## 🤝 Contributing & License
 
-Contributions, bug reports, and pull requests are warmly welcomed!  
+Contributions, bug reports and pull requests are warmly welcomed!  
 Licensed under the **MIT License**.
