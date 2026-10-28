@@ -21,14 +21,14 @@
 ### Page 1: First-Time Onboarding & Profile Setup
 > *When your friend runs RetroOS for the first time, they are welcomed by the RetroOS banner and prompted to create their custom shell username.*
 
-![Page 1 - Welcome & Setup](screenshots/welcome_page.png)
+![Page 1 - Welcome & Setup](screenshots/t1.png)
 
 ---
 
 ### Page 2: Interactive Cyber Purple Fastfetch Shell
 > *Instant transition to the interactive session featuring the 18-line Braille Cyber Purple Cat, live system analytics tree, and powerline prompt.*
 
-![Page 2 - Shell & Fastfetch](screenshots/fastfetch_cat.png)
+![Page 2 - Shell & Fastfetch](t2.png)
 
 </div>
 
@@ -115,14 +115,14 @@ npm start
 2. **Step 2 (The Shell Session):**
    The screen clears to **Page 2** displaying the Cyber Purple Cat, the live hardware and OS specs, and their new prompt:
    ```text
-    luckman041@retros  ~/retroos-terminal  >
+    comando_32@retros  ~/retroos-terminal  >
    ```
-3. **Step 3 (Taking a Screenshot of Page 1):**
-   They can simply run:
+3. **Step 3 (Returning to the Welcome Screen):**
+   If users want to return to the welcome screen, they can simply type:
    ```bash
    welcome
    ```
-   This immediately opens Page 1 so they can take a screenshot! Pressing `Enter` returns back to the shell smoothly.
+   This command immediately displays the welcome screen. Pressing Enter allows users to return to the shell smoothly.
 
 ---
 
