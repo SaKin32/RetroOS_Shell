@@ -65,7 +65,7 @@ If your friend has a Linux terminal or Windows Subsystem for Linux (WSL):
 
 #### 1. Clone the repository
 ```bash
-git clone https://github.com/<your-username>/retroos-terminal.git
+git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd retroos-terminal
 ```
 
@@ -93,7 +93,7 @@ To run the complete windowed terminal with the custom titlebar and font zoom:
 #### 2. Install Dependencies & Launch
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/retroos-terminal.git
+git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd retroos-terminal
 
 # Install dependencies (only required once)
