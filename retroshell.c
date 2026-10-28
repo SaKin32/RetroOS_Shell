@@ -1052,15 +1052,43 @@ static int bi_user(int argc, char **argv)
     if (home && *home) snprintf(path, sizeof(path), "%s/.retroshell_user", home);
     else strcpy(path, ".retroshell_user");
 
-    if (argc < 2) {
+    if (argc == 1 || (argc == 2 && strcmp(argv[1], "info") == 0)) {
         set_fg((RGB){0xc0, 0x84, 0xfc});
-        printf("Current username: ");
+        printf(BOLD "\n  [ RetroOS User Profile ]\n" RESET);
+        set_fg(MUTED); printf("  ──────────────────────────────────────────\n");
+        set_fg(CYAN);  printf("  • Active Identity : ");
         set_fg(WHITE); printf(BOLD "%s@retros\n" RESET, g_username[0] ? g_username : "retro");
-        set_fg(MUTED); printf("To change: user <new_name>\n" RESET);
+        set_fg(CYAN);  printf("  • Profile Store   : ");
+        set_fg(MUTED); printf("%s\n", path);
+        set_fg(MUTED); printf("  ──────────────────────────────────────────\n");
+        set_fg((RGB){0xfa, 0xb3, 0x87});
+        printf("  Management Options:\n");
+        set_fg(GREEN); printf("    user rename <new_name> ");
+        set_fg(MUTED); printf("-> Change your username\n");
+        set_fg(RED);   printf("    user delete            ");
+        set_fg(MUTED); printf("-> Delete profile (prompts on next launch)\n");
+        set_fg(CYAN);  printf("    welcome                ");
+        set_fg(MUTED); printf("-> Open Page 1 onboarding setup\n\n" RESET);
         return 0;
     }
 
-    strncpy(g_username, argv[1], sizeof(g_username) - 1);
+    if (strcmp(argv[1], "delete") == 0 || strcmp(argv[1], "remove") == 0 || strcmp(argv[1], "reset") == 0) {
+        unlink(path);
+        g_username[0] = '\0';
+        set_fg(RED);
+        printf(BOLD "[*] Account profile deleted successfully!\n" RESET);
+        set_fg(MUTED);
+        printf("    When you or your friend restarts RetroOS, Page 1 will ask to create a new profile.\n" RESET);
+        return 0;
+    }
+
+    const char *new_name = (strcmp(argv[1], "rename") == 0 && argc >= 3) ? argv[2] : argv[1];
+    if (strcmp(new_name, "rename") == 0) {
+        set_fg(RED); printf("Usage: user rename <new_name>\n" RESET);
+        return 1;
+    }
+
+    strncpy(g_username, new_name, sizeof(g_username) - 1);
     g_username[sizeof(g_username) - 1] = '\0';
 
     FILE *f = fopen(path, "w");
@@ -1069,7 +1097,7 @@ static int bi_user(int argc, char **argv)
         fclose(f);
     }
     set_fg(GREEN);
-    printf("[*] Username set to: ");
+    printf("[*] Username updated to: ");
     set_fg(WHITE); printf(BOLD "%s@retros\n" RESET, g_username);
     return 0;
 }
