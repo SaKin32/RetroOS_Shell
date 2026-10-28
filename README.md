@@ -28,7 +28,7 @@
 ### Page 2: Interactive Cyber Purple Fastfetch Shell
 > *Instant transition to the interactive session featuring the 18-line Braille Cyber Purple Cat, live system analytics tree, and powerline prompt.*
 
-![Page 2 - Shell & Fastfetch](t2.png)
+![Page 2 - Shell & Fastfetch](screenshots/t2.png)
 
 </div>
 
