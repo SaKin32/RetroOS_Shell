@@ -1,4 +1,4 @@
-# 🔮 RetroOS Terminal & retroshell
+# RetroOS Terminal & retroshell
 
 <div align="center">
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 📸 Screenshots Showcase
+## Screenshots Showcase
 
 <div align="center">
 
@@ -34,20 +34,20 @@
 
 ---
 
-## ✨ Features at a Glance
+## Features at a Glance
 
-- 👤 **Personalized User Identity (`username@retros`)**
+- **Personalized User Identity (`username@retros`)**
   - First-time interactive setup creates a personalized environment file (`~/.retroshell_user`).
   - Type `welcome` anytime to revisit Page 1 for screenshots or reconfiguring.
   - Type `user <new_name>` to instantly rename your prompt.
-- 🐱 **Vibrant Cyber Purple Fastfetch Art**
+- **Vibrant Cyber Purple Fastfetch Art**
   - Handcrafted 18-line Braille halftone character in vibrant Cyber Purple (`#c084fc`).
   - Tree-structured system analytics: OS, Kernel, Live Uptime, CPU Cores, RAM consumption, and 7-swatch color palette.
-- 🖥️ **Desktop Terminal GUI (Electron + xterm.js)**
+- **Desktop Terminal GUI (Electron + xterm.js)**
   - Pitch black OLED canvas (`#000000`).
   - Sleek custom titlebar with Sky Cyan (`−`), Emerald Green (`[ ]`), and Rose Red (`✕`) window buttons.
   - **Dynamic Font Zoom**: Interactive `[A-] 15px [A+]` titlebar badge, `Ctrl + =` / `Ctrl + -` / `Ctrl + 0` keyboard shortcuts, and `Ctrl + MouseWheel` zoom.
-- ⚙️ **Operating System Core Emulation**
+- **Operating System Core Emulation**
   - Pipelines (`cmd1 | cmd2 | cmd3`), background processes (`&`), file redirection (`<`, `>`, `>>`).
   - Real OS CPU Process Scheduler (`sched fcfs`, `sched real rr`) with live Gantt chart generation.
   - Live system resource and process monitor dashboard (`monitor`).
@@ -55,7 +55,7 @@
 
 ---
 
-## 🚀 Getting Started (Step-by-Step Guide)
+## Getting Started (Step-by-Step Guide)
 
 Share these easy steps with any friend who wants to test RetroOS!
 
@@ -105,13 +105,13 @@ npm start
 
 ---
 
-## 🎮 What Your Friend Will Experience
+## What Your Friend Will Experience
 
 1. **Step 1 (First Launch):** The terminal greets them with the RetroOS block logo:
    ```text
      [?] Enter username: 
    ```
-   They can type their own name (e.g., `luckman041`).
+   They can type their own name (e.g., `comando_32`).
 2. **Step 2 (The Shell Session):**
    The screen clears to **Page 2** displaying the Cyber Purple Cat, the live hardware and OS specs, and their new prompt:
    ```text
@@ -153,7 +153,7 @@ npm start
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 retroos-terminal/
@@ -168,7 +168,6 @@ retroos-terminal/
 
 ---
 
-## 🤝 Contributing & License
+## Contributing & License
 
 Contributions, bug reports and pull requests are warmly welcomed!  
-Licensed under the **MIT License**.
