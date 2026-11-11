@@ -1,3 +1,4 @@
+const path = require('path');
 const electron = require('electron');
 const { app, BrowserWindow, ipcMain, globalShortcut } = electron;
 const pty = require('@lydell/node-pty');
@@ -23,6 +24,7 @@ if (!gotLock) {
       ...pos,
       frame: false,            // Frameless window without OS-native title bar or borders
       backgroundColor: '#000000',
+      icon: path.join(__dirname, 'icon.png'),
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false
