@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/select.h>
@@ -91,6 +92,88 @@ static int use_powerline = 1; /* 0 = plain ASCII separators               */
 
 static volatile sig_atomic_t got_sigint = 0;   /* set by Ctrl+C */
 static void sigint_handler(int sig) { (void)sig; got_sigint = 1; /* also interrupts getline() */ }
+
+/* ------------------------------------------------------------------
+ * Operating System Environments: Windows, Linux, Hybrid
+ * ------------------------------------------------------------------ */
+typedef enum {
+    OS_MODE_HYBRID = 0,
+    OS_MODE_WINDOWS = 1,
+    OS_MODE_LINUX = 2
+} OperatingMode;
+
+static OperatingMode g_os_mode = OS_MODE_HYBRID;
+
+static const char *get_os_mode_name(OperatingMode m)
+{
+    switch (m) {
+        case OS_MODE_WINDOWS: return "Windows Native Mode";
+        case OS_MODE_LINUX:   return "Linux Unix Mode";
+        default:              return "Hybrid Interop Mode";
+    }
+}
+
+static void select_os_boot_mode(void)
+{
+    if (!isatty(STDIN_FILENO)) return;
+
+    printf("\x1b[2J\x1b[H\n");
+    set_fg((RGB){0xcb, 0xa6, 0xf7});
+    printf(BOLD "  ██████╗ ███████╗████████╗██████╗  ██████╗  ██████╗ ███████╗\n"
+                "  ██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔═══██╗██╔════╝\n"
+                "  ██████╔╝█████╗     ██║   ██████╔╝██║   ██║██║   ██║███████╗\n"
+                "  ██╔══██╗██╔══╝     ██║   ██╔══██╗██║   ██║██║   ██║╚════██║\n"
+                "  ██║  ██║███████╗   ██║   ██║  ██║╚██████╔╝╚██████╔╝███████║\n"
+                "  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝\n" RESET);
+
+    set_fg((RGB){0x38, 0xbd, 0xf8});
+    printf(BOLD "\n  R E T R O   O S   B O O T   L O A D E R\n" RESET);
+    set_fg((RGB){0x94, 0xa3, 0xb8});
+    printf("  Select your preferred Operating System execution environment:\n");
+    set_fg((RGB){0x58, 0x5b, 0x70});
+    printf("  ─────────────────────────────────────────────────────────────────────────────\n");
+
+    set_fg((RGB){0x38, 0xbd, 0xf8});
+    printf(BOLD "  [1] Windows Engine Mode\n" RESET);
+    set_fg((RGB){0x94, 0xa3, 0xb8});
+    printf("      -> Default to C:\\ / E:\\, Windows CMD commands (dir, cls, ipconfig)\n\n");
+
+    set_fg((RGB){0xa6, 0xe3, 0xa1});
+    printf(BOLD "  [2] Linux Unix Engine Mode\n" RESET);
+    set_fg((RGB){0x94, 0xa3, 0xb8});
+    printf("      -> Default to ~/home, pure POSIX shell, schedulers, and Linux tools\n\n");
+
+    set_fg((RGB){0xc0, 0x84, 0xfc});
+    printf(BOLD "  [3] Hybrid Mode (Recommended)\n" RESET);
+    set_fg((RGB){0x94, 0xa3, 0xb8});
+    printf("      -> Seamless dual compatibility: run Windows apps + Linux OS together\n");
+
+    set_fg((RGB){0x58, 0x5b, 0x70});
+    printf("  ─────────────────────────────────────────────────────────────────────────────\n");
+    set_fg((RGB){0xfa, 0xcc, 0x15});
+    printf(BOLD "  Select Mode [1, 2, or 3] (Press Enter for Hybrid): " RESET);
+    fflush(stdout);
+
+    char line[64];
+    if (fgets(line, sizeof(line), stdin)) {
+        char *p = line;
+        while (isspace((unsigned char)*p)) p++;
+        if (*p == '1') {
+            g_os_mode = OS_MODE_WINDOWS;
+            const char *win_home = "/mnt/c/Users/mdsho";
+            chdir(win_home);
+        } else if (*p == '2') {
+            g_os_mode = OS_MODE_LINUX;
+            const char *home = getenv("HOME");
+            if (home) chdir(home);
+        } else {
+            g_os_mode = OS_MODE_HYBRID;
+            chdir("/mnt/c/Users/mdsho");
+        }
+    }
+    printf("\x1b[2J\x1b[H");
+    fflush(stdout);
+}
 
 /* ------------------------------------------------------------------
  * User configuration & Prompt  [ user@retros ][ ~/dir ] ❯
@@ -225,10 +308,11 @@ static void print_prompt(void)
 
     const char *uname = g_username[0] ? g_username : "retro";
     char user_tag[128];
+    const char *mode_badge = g_os_mode == OS_MODE_WINDOWS ? "WIN" : (g_os_mode == OS_MODE_LINUX ? "LINUX" : "HYBRID");
     if (kernel_mode) {
-        snprintf(user_tag, sizeof(user_tag), "root@retros");
+        snprintf(user_tag, sizeof(user_tag), "root@retros [%s]", mode_badge);
     } else {
-        snprintf(user_tag, sizeof(user_tag), "%s@retros", uname);
+        snprintf(user_tag, sizeof(user_tag), "%s@retros [%s]", uname, mode_badge);
     }
 
     printf("\n");
@@ -2053,6 +2137,91 @@ static int bi_monitor(int argc, char **argv)
     return 0;
 }
 
+/* ------------------------------------------------------------------
+ * OS Mode & Dual Filesystem Visualizer (for OS Academic & Demo)
+ * ------------------------------------------------------------------ */
+static int bi_os(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("\n");
+        set_fg((RGB){0x38, 0xbd, 0xf8});
+        printf(BOLD "  Current Environment: %s\n" RESET, get_os_mode_name(g_os_mode));
+        set_fg((RGB){0x94, 0xa3, 0xb8});
+        printf("  Usage to switch mode:  os win | os linux | os hybrid\n");
+        printf("  - os win    : Focuses on Windows drives and CMD toolset\n");
+        printf("  - os linux  : Focuses on Linux root/home and Unix POSIX tools\n");
+        printf("  - os hybrid : Blends both operating environments seamlessly\n\n");
+        return 0;
+    }
+
+    const char *arg = argv[1];
+    if (strcasecmp(arg, "win") == 0 || strcasecmp(arg, "windows") == 0) {
+        g_os_mode = OS_MODE_WINDOWS;
+        chdir("/mnt/c/Users/mdsho");
+        set_fg((RGB){0x38, 0xbd, 0xf8});
+        printf(BOLD "[+] Switched to Windows Native Mode.\n" RESET);
+        set_fg((RGB){0x94, 0xa3, 0xb8});
+        printf("    Working directory set to Windows User Home (C:\\Users\\mdsho)\n\n");
+    } else if (strcasecmp(arg, "linux") == 0 || strcasecmp(arg, "unix") == 0) {
+        g_os_mode = OS_MODE_LINUX;
+        const char *h = getenv("HOME");
+        if (h) chdir(h);
+        set_fg((RGB){0xa6, 0xe3, 0xa1});
+        printf(BOLD "[+] Switched to Linux Unix Mode.\n" RESET);
+        set_fg((RGB){0x94, 0xa3, 0xb8});
+        printf("    Working directory set to Linux User Home (~)\n\n");
+    } else if (strcasecmp(arg, "hybrid") == 0 || strcasecmp(arg, "dual") == 0) {
+        g_os_mode = OS_MODE_HYBRID;
+        set_fg((RGB){0xc0, 0x84, 0xfc});
+        printf(BOLD "[+] Switched to Hybrid Interop Mode (Dual Windows + Linux).\n\n" RESET);
+    } else {
+        fprintf(stderr, "os: unknown mode '%s'. Use 'win', 'linux', or 'hybrid'.\n", arg);
+        return 1;
+    }
+    return 0;
+}
+
+static int bi_fs(void)
+{
+    printf("\n");
+    set_fg((RGB){0xcb, 0xa6, 0xf7});
+    printf(BOLD "  ================== DUAL OS FILESYSTEM MAPPING ==================\n" RESET);
+
+    /* Windows Partition Section */
+    set_fg((RGB){0x38, 0xbd, 0xf8});
+    printf(BOLD "\n  [WINDOWS HOST PARTITIONS]\n" RESET);
+    set_fg((RGB){0x94, 0xa3, 0xb8});
+    printf("  Logical Drive   WSL Mount Point   Filesystem Type   Status\n");
+    printf("  -------------   ---------------   ---------------   ------\n");
+    set_fg((RGB){0xf8, 0x71, 0x71}); printf("  C:\\             ");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("/mnt/c            NTFS / 9p         Active (System OS)\n");
+    set_fg((RGB){0xfa, 0xcc, 0x15}); printf("  E:\\             ");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("/mnt/e            NTFS / 9p         Active (RetroOS Repo)\n");
+
+    /* Linux VFS Partition Section */
+    set_fg((RGB){0xa6, 0xe3, 0xa1});
+    printf(BOLD "\n  [LINUX UNIX VIRTUAL FILESYSTEMS (VFS)]\n" RESET);
+    set_fg((RGB){0x94, 0xa3, 0xb8});
+    printf("  Virtual Path    Target Storage    Purpose\n");
+    printf("  ------------    --------------    -------\n");
+    set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  /               ");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("ext4 rootfs       Unix Root System\n");
+    set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  ~ (/home/...)   ");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("ext4 user home    Unix User Configs & retroshell\n");
+    set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  /proc           ");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("procfs (memory)   Kernel Process Tree & Live Stats\n");
+    set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  /sys            ");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("sysfs (kernel)    Hardware & Driver Subsystems\n");
+
+    set_fg((RGB){0x58, 0x5b, 0x70});
+    printf("  ─────────────────────────────────────────────────────────────────\n");
+    set_fg((RGB){0xfa, 0xb3, 0x87});
+    printf("  Navigation Tip:\n");
+    printf("  - To explore Windows drives:  type  C:  or  E:  or  dir\n");
+    printf("  - To explore Linux system:    type  cd ~  or  cd /  or  ls\n\n" RESET);
+    return 0;
+}
+
 static int is_drive_letter(const char *name)
 {
     if (!name) return 0;
@@ -2062,7 +2231,7 @@ static int is_drive_letter(const char *name)
 }
 
 static const char *BUILTIN_NAMES[] = {
-    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "cls", "dir", "type", "md", "rd", "del", "copy", "move", "ren", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
+    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "cls", "dir", "type", "md", "rd", "del", "copy", "move", "ren", "os", "mode", "fs", "drives", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
 };
 
 static int is_builtin(const char *name)
@@ -2185,6 +2354,8 @@ static int run_builtin(int argc, char **argv, int *status)
         int ws; waitpid(pid, &ws, 0);
         *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
     }
+    else if (strcmp(c, "os") == 0 || strcmp(c, "mode") == 0)   *status = bi_os(argc, argv);
+    else if (strcmp(c, "fs") == 0 || strcmp(c, "drives") == 0) *status = bi_fs();
     else if (strcmp(c, "fastfetch") == 0 || strcmp(c, "fetch") == 0) { print_banner(); fflush(stdout); *status = 0; }
     else if (strcmp(c, "export") == 0)      *status = bi_export(argc, argv);
     else if (strcmp(c, "unset") == 0)       *status = bi_unset(argc, argv);
@@ -2702,6 +2873,7 @@ int main(int argc, char **argv)
     signal(SIGQUIT, SIG_IGN);
 
     load_or_ask_username();
+    select_os_boot_mode();
     print_banner();
 
     for (;;) {
