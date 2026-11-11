@@ -171,7 +171,8 @@ static void select_os_boot_mode(void)
             chdir("/mnt/c/Users/mdsho");
         }
     }
-    printf("\x1b[2J\x1b[H");
+    /* Clear screen AND clear scrollback buffer completely (\x1b[3J) so previous boot menu never overlaps */
+    printf("\x1b[H\x1b[2J\x1b[3J");
     fflush(stdout);
 }
 
@@ -244,8 +245,8 @@ static void load_or_ask_username(void)
         }
         printf(RESET);
 
-        /* New Page transition: clear screen so user enters shell on a fresh page */
-        printf("\x1b[2J\x1b[H");
+        /* New Page transition: clear screen AND scrollback buffer so user enters shell on a fresh page */
+        printf("\x1b[H\x1b[2J\x1b[3J");
         fflush(stdout);
     }
 

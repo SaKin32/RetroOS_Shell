@@ -140,8 +140,11 @@
   const term = new Terminal({
     fontFamily: '"RetroNerd","Cascadia Mono",Consolas,monospace',
     fontSize: currentFontSize,
+    lineHeight: 1.15,
+    letterSpacing: 0,
     cursorBlink: true,
     allowProposedApi: true,
+    rescaleOverlappingGlyphs: true,
     theme: {
       background: '#000000',
       foreground: '#f3e8ff',
@@ -166,20 +169,34 @@
   ipcRenderer.on('pty-data', (e, d) => term.write(d));
   term.onData((d) => ipcRenderer.send('pty-input', d));
 
+  let fitTimeout = null;
   function doFit() {
-    fit.fit();
-    ipcRenderer.send('pty-resize', { cols: term.cols, rows: term.rows });
+    try {
+      fit.fit();
+      if (term.cols && term.rows) {
+        ipcRenderer.send('pty-resize', { cols: term.cols, rows: term.rows });
+      }
+      term.refresh(0, term.rows - 1);
+    } catch (_) {}
   }
-  window.addEventListener('resize', doFit);
+
+  function debouncedFit() {
+    if (fitTimeout) clearTimeout(fitTimeout);
+    fitTimeout = setTimeout(() => {
+      doFit();
+    }, 50);
+  }
+  window.addEventListener('resize', debouncedFit);
 
   function changeFontSize(delta) {
-    const next = Math.min(36, Math.max(10, currentFontSize + delta));
+    // Keep font size between 12px (crisp braille art limit) and 28px
+    const next = Math.min(28, Math.max(12, currentFontSize + delta));
     if (next !== currentFontSize) {
       currentFontSize = next;
       localStorage.setItem('retro_font_size', currentFontSize);
       term.options.fontSize = currentFontSize;
       updateFontBadge();
-      doFit();
+      debouncedFit();
     }
   }
 
@@ -188,7 +205,7 @@
     localStorage.setItem('retro_font_size', currentFontSize);
     term.options.fontSize = currentFontSize;
     updateFontBadge();
-    doFit();
+    debouncedFit();
   }
 
   document.getElementById('font-dec').onclick = () => changeFontSize(-1);
