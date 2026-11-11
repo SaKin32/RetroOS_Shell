@@ -104,6 +104,46 @@ typedef enum {
 
 static OperatingMode g_os_mode = OS_MODE_HYBRID;
 
+static const char *get_dynamic_windows_home(char *buf, size_t sz)
+{
+    /* Check Windows USERPROFILE environment variable if forwarded */
+    const char *prof = getenv("USERPROFILE");
+    if (prof && *prof) {
+        if (isalpha((unsigned char)prof[0]) && prof[1] == ':') {
+            char d = tolower((unsigned char)prof[0]);
+            char converted[PATH_MAX];
+            strncpy(converted, prof + 2, sizeof(converted) - 1);
+            converted[sizeof(converted) - 1] = '\0';
+            for (char *c = converted; *c; c++) if (*c == '\\') *c = '/';
+            snprintf(buf, sz, "/mnt/%c%s", d, converted);
+            if (access(buf, F_OK) == 0) return buf;
+        }
+    }
+
+    /* Fallback: Scan /mnt/c/Users/ for actual usernames excluding system folders */
+    DIR *d = opendir("/mnt/c/Users");
+    if (d) {
+        struct dirent *ent;
+        while ((ent = readdir(d)) != NULL) {
+            if (ent->d_name[0] == '.') continue;
+            if (strcasecmp(ent->d_name, "Public") == 0 ||
+                strcasecmp(ent->d_name, "Default") == 0 ||
+                strcasecmp(ent->d_name, "Default User") == 0 ||
+                strcasecmp(ent->d_name, "All Users") == 0)
+                continue;
+            snprintf(buf, sz, "/mnt/c/Users/%s", ent->d_name);
+            closedir(d);
+            return buf;
+        }
+        closedir(d);
+    }
+
+    /* If not running on WSL with /mnt/c, fallback to Linux HOME or cwd */
+    const char *h = getenv("HOME");
+    if (h && *h) return h;
+    return ".";
+}
+
 static const char *get_os_mode_name(OperatingMode m)
 {
     switch (m) {
@@ -154,21 +194,23 @@ static void select_os_boot_mode(void)
     printf(BOLD "  Select Mode [1, 2, or 3] (Press Enter for Hybrid): " RESET);
     fflush(stdout);
 
+    char win_path_buf[PATH_MAX];
+    const char *detected_win_home = get_dynamic_windows_home(win_path_buf, sizeof(win_path_buf));
+
     char line[64];
     if (fgets(line, sizeof(line), stdin)) {
         char *p = line;
         while (isspace((unsigned char)*p)) p++;
         if (*p == '1') {
             g_os_mode = OS_MODE_WINDOWS;
-            const char *win_home = "/mnt/c/Users/mdsho";
-            chdir(win_home);
+            chdir(detected_win_home);
         } else if (*p == '2') {
             g_os_mode = OS_MODE_LINUX;
             const char *home = getenv("HOME");
             if (home) chdir(home);
         } else {
             g_os_mode = OS_MODE_HYBRID;
-            chdir("/mnt/c/Users/mdsho");
+            chdir(detected_win_home);
         }
     }
     /* Clear screen AND clear scrollback buffer completely (\x1b[3J) so previous boot menu never overlaps */
@@ -2158,11 +2200,15 @@ static int bi_os(int argc, char **argv)
     const char *arg = argv[1];
     if (strcasecmp(arg, "win") == 0 || strcasecmp(arg, "windows") == 0) {
         g_os_mode = OS_MODE_WINDOWS;
-        chdir("/mnt/c/Users/mdsho");
+        char win_buf[PATH_MAX];
+        const char *win_dir = get_dynamic_windows_home(win_buf, sizeof(win_buf));
+        chdir(win_dir);
+        char shown[PATH_MAX];
+        format_display_path(win_dir, shown, sizeof(shown));
         set_fg((RGB){0x38, 0xbd, 0xf8});
         printf(BOLD "[+] Switched to Windows Native Mode.\n" RESET);
         set_fg((RGB){0x94, 0xa3, 0xb8});
-        printf("    Working directory set to Windows User Home (C:\\Users\\mdsho)\n\n");
+        printf("    Working directory set to Windows User Home (%s)\n\n", shown);
     } else if (strcasecmp(arg, "linux") == 0 || strcasecmp(arg, "unix") == 0) {
         g_os_mode = OS_MODE_LINUX;
         const char *h = getenv("HOME");
@@ -2188,38 +2234,59 @@ static int bi_fs(void)
     set_fg((RGB){0xcb, 0xa6, 0xf7});
     printf(BOLD "  ================== DUAL OS FILESYSTEM MAPPING ==================\n" RESET);
 
-    /* Windows Partition Section */
+    /* Dynamically Scan Active Windows Partitions in /mnt/ */
     set_fg((RGB){0x38, 0xbd, 0xf8});
-    printf(BOLD "\n  [WINDOWS HOST PARTITIONS]\n" RESET);
+    printf(BOLD "\n  [DETECTED WINDOWS HOST PARTITIONS]\n" RESET);
     set_fg((RGB){0x94, 0xa3, 0xb8});
-    printf("  Logical Drive   WSL Mount Point   Filesystem Type   Status\n");
-    printf("  -------------   ---------------   ---------------   ------\n");
-    set_fg((RGB){0xf8, 0x71, 0x71}); printf("  C:\\             ");
-    set_fg((RGB){0xff, 0xff, 0xff}); printf("/mnt/c            NTFS / 9p         Active (System OS)\n");
-    set_fg((RGB){0xfa, 0xcc, 0x15}); printf("  E:\\             ");
-    set_fg((RGB){0xff, 0xff, 0xff}); printf("/mnt/e            NTFS / 9p         Active (RetroOS Repo)\n");
+    printf("  Drive Letter    WSL Mount Point   Filesystem Type   Status\n");
+    printf("  ------------    ---------------   ---------------   ------\n");
 
-    /* Linux VFS Partition Section */
+    int found_win_drives = 0;
+    DIR *mnt_dir = opendir("/mnt");
+    if (mnt_dir) {
+        struct dirent *ent;
+        while ((ent = readdir(mnt_dir)) != NULL) {
+            if (ent->d_name[0] == '.') continue;
+            if (strlen(ent->d_name) == 1 && isalpha((unsigned char)ent->d_name[0])) {
+                char d_upper = toupper((unsigned char)ent->d_name[0]);
+                char full_mnt[PATH_MAX];
+                snprintf(full_mnt, sizeof(full_mnt), "/mnt/%s", ent->d_name);
+                set_fg((RGB){0x38, 0xbd, 0xf8}); printf("  %c:\\             ", d_upper);
+                set_fg((RGB){0xff, 0xff, 0xff}); printf("%-17s DrvFs / 9p       Active (Accessible)\n", full_mnt);
+                found_win_drives++;
+            }
+        }
+        closedir(mnt_dir);
+    }
+    if (!found_win_drives) {
+        set_fg((RGB){0x94, 0xa3, 0xb8});
+        printf("  (No /mnt/<drive> partitions detected - Running on Native Linux/macOS)\n");
+    }
+
+    /* Linux VFS Section (Real paths) */
     set_fg((RGB){0xa6, 0xe3, 0xa1});
     printf(BOLD "\n  [LINUX UNIX VIRTUAL FILESYSTEMS (VFS)]\n" RESET);
     set_fg((RGB){0x94, 0xa3, 0xb8});
     printf("  Virtual Path    Target Storage    Purpose\n");
     printf("  ------------    --------------    -------\n");
     set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  /               ");
-    set_fg((RGB){0xff, 0xff, 0xff}); printf("ext4 rootfs       Unix Root System\n");
-    set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  ~ (/home/...)   ");
-    set_fg((RGB){0xff, 0xff, 0xff}); printf("ext4 user home    Unix User Configs & retroshell\n");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("rootfs            Unix Root Environment\n");
+
+    const char *h = getenv("HOME");
+    set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  ~ (%s) ", h ? h : "/home/user");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("User Home Directory & Configs\n");
+
     set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  /proc           ");
-    set_fg((RGB){0xff, 0xff, 0xff}); printf("procfs (memory)   Kernel Process Tree & Live Stats\n");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("procfs (RAM)      Kernel Virtual Process Tree & Metrics\n");
     set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("  /sys            ");
-    set_fg((RGB){0xff, 0xff, 0xff}); printf("sysfs (kernel)    Hardware & Driver Subsystems\n");
+    set_fg((RGB){0xff, 0xff, 0xff}); printf("sysfs (RAM)       Device Drivers & Kernel Subsystems\n");
 
     set_fg((RGB){0x58, 0x5b, 0x70});
     printf("  ─────────────────────────────────────────────────────────────────\n");
     set_fg((RGB){0xfa, 0xb3, 0x87});
-    printf("  Navigation Tip:\n");
-    printf("  - To explore Windows drives:  type  C:  or  E:  or  dir\n");
-    printf("  - To explore Linux system:    type  cd ~  or  cd /  or  ls\n\n" RESET);
+    printf("  Navigation Tips:\n");
+    printf("  - Switch Windows Drive : type  C:  or  E:  or  D:\n");
+    printf("  - Switch Linux Folder  : type  cd ~  or  cd /\n\n" RESET);
     return 0;
 }
 
@@ -2516,16 +2583,32 @@ static int run_pipeline(Stage *st, int n, int is_bg, const char *cmd_str)
             }
             execvp(cmd_argv[0], cmd_argv);
             /* If command not found, try appending Windows .exe or .cmd */
-            if (errno == ENOENT && cmd_argv[0] && !strchr(cmd_argv[0], '.')) {
+            if (errno == ENOENT && cmd_argv[0]) {
                 char win_cmd[PATH_MAX];
-                snprintf(win_cmd, sizeof(win_cmd), "%s.exe", cmd_argv[0]);
                 char *orig0 = cmd_argv[0];
-                cmd_argv[0] = win_cmd;
-                execvp(win_cmd, cmd_argv);
 
-                snprintf(win_cmd, sizeof(win_cmd), "%s.cmd", orig0);
-                cmd_argv[0] = win_cmd;
-                execvp(win_cmd, cmd_argv);
+                if (!strchr(cmd_argv[0], '.')) {
+                    snprintf(win_cmd, sizeof(win_cmd), "%s.exe", orig0);
+                    cmd_argv[0] = win_cmd;
+                    execvp(win_cmd, cmd_argv);
+
+                    snprintf(win_cmd, sizeof(win_cmd), "%s.cmd", orig0);
+                    cmd_argv[0] = win_cmd;
+                    execvp(win_cmd, cmd_argv);
+                }
+
+                /* If still not found, check standard Windows system directories */
+                snprintf(win_cmd, sizeof(win_cmd), "/mnt/c/Windows/System32/%s%s", orig0, strchr(orig0, '.') ? "" : ".exe");
+                if (access(win_cmd, X_OK) == 0) {
+                    cmd_argv[0] = win_cmd;
+                    execvp(win_cmd, cmd_argv);
+                }
+
+                snprintf(win_cmd, sizeof(win_cmd), "/mnt/c/Windows/%s%s", orig0, strchr(orig0, '.') ? "" : ".exe");
+                if (access(win_cmd, X_OK) == 0) {
+                    cmd_argv[0] = win_cmd;
+                    execvp(win_cmd, cmd_argv);
+                }
 
                 cmd_argv[0] = orig0;
             }

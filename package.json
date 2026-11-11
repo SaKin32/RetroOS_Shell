@@ -4,7 +4,8 @@
   "description": "RetroOS standalone terminal",
   "main": "main.js",
   "scripts": {
-    "start": "node_modules\\electron\\dist\\electron.exe ."
+    "start": "electron .",
+    "build:c": "make"
   },
   "dependencies": {
     "@lydell/node-pty": "^1.1.0",

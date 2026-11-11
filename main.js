@@ -62,17 +62,31 @@ if (!gotLock) {
   });
   app.on('window-all-closed', () => app.quit());
 
-  // ---- Shell Process Management (WSL) ----
+  // ---- Shell Process Management (Cross-Platform) ----
   ipcMain.on('pty-start', (e, size) => {
     const s = sessions.get(e.sender.id);
     if (!s || s.term) return;
 
-    // Launch shell directly into the Windows user profile directory
-    const winHome = process.env.USERPROFILE || 'C:\\Users\\mdsho';
-    s.term = pty.spawn('wsl.exe', ['--cd', winHome, '-e', '/home/comando_32/retroshell/retroshell'], {
+    let shellCmd = '';
+    let shellArgs = [];
+
+    if (process.platform === 'win32') {
+      // On Windows: run retroshell via WSL
+      const winHome = process.env.USERPROFILE || process.cwd();
+      shellCmd = 'wsl.exe';
+      // Dynamically run retroshell from user's WSL home or PATH
+      shellArgs = ['--cd', winHome, '-e', 'bash', '-c', 'if command -v retroshell >/dev/null 2>&1; then retroshell; elif [ -f ~/retroshell/retroshell ]; then ~/retroshell/retroshell; else ./retroshell; fi'];
+    } else {
+      // On native Linux or macOS: run compiled retroshell directly
+      shellCmd = path.join(__dirname, 'retroshell');
+      shellArgs = [];
+    }
+
+    s.term = pty.spawn(shellCmd, shellArgs, {
       name: 'xterm-256color',
       cols: size.cols,
       rows: size.rows,
+      cwd: process.cwd(),
       env: process.env
     });
     s.term.onData((d) => { if (!s.win.isDestroyed()) s.win.webContents.send('pty-data', d); });

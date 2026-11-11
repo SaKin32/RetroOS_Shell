@@ -3,248 +3,164 @@
 <div align="center">
 
 ![C11](https://img.shields.io/badge/Language-C11%20Standard-blue?style=for-the-badge&logo=c)
-![Electron](https://img.shields.io/badge/Frontend-Electron%20v33%20%2B%20xterm.js-47848F?style=for-the-badge&logo=electron)
-![Node](https://img.shields.io/badge/Runtime-Node.js%2018%2B-339933?style=for-the-badge&logo=nodedotjs)
-![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%20Linux%20%7C%20macOS-blueviolet?style=for-the-badge&logo=windows)
-![Architecture](https://img.shields.io/badge/Architecture-x86__64-orange?style=for-the-badge)
+![Electron](https://img.shields.io/badge/GUI-Electron%20v33%20%2B%20xterm.js-47848F?style=for-the-badge&logo=electron)
+![Platform](https://img.shields.io/badge/Primary%20Platform-Windows%2011%20(WSL2)-0078D6?style=for-the-badge&logo=windows)
+![CLI](https://img.shields.io/badge/CLI%20Platform-Linux%20%7C%20macOS-339933?style=for-the-badge&logo=linux)
 ![License](https://img.shields.io/badge/License-MIT-ec4899?style=for-the-badge)
 
-**A Next-Generation Cyberpunk Desktop Terminal & Hybrid Unix/Windows Operating Environment**
+**A Cyberpunk Desktop Terminal & Educational Unix/Windows Hybrid Shell**
 
-*Dual OS Boot Selector · POSIX Unix Engine · Windows CMD Compatibility · Braille Fastfetch Analytics*
-*Interactive CPU Process Scheduler · Seamless Virtual Filesystem Mapping · Frameless OLED GUI*
+*POSIX Unix Core · Dynamic OS Boot Selector · Windows Command Interop Bridge*
+*Braille Halftone Fastfetch · CPU Process Scheduler · Dynamic VFS Mapper*
 
 </div>
 
 ---
 
-## Table of Contents
+## 1. Project Purpose & Academic Context
 
-- [1. Executive Summary](#1-executive-summary)
-- [2. Architectural Overview](#2-architectural-overview)
-- [3. Dual OS Execution Modes](#3-dual-os-execution-modes)
-- [4. Dual Filesystem Mapping (VFS)](#4-dual-filesystem-mapping-vfs)
-- [5. Complete Command Reference](#5-complete-command-reference)
-  - [5.1 Windows CMD & System Commands](#51-windows-cmd--system-commands)
-  - [5.2 POSIX Unix & Pipeline Commands](#52-posix-unix--pipeline-commands)
-  - [5.3 Core OS Academic & Scheduling Commands](#53-core-os-academic--scheduling-commands)
-  - [5.4 Hybrid Workflows (Piping Windows to Linux)](#54-hybrid-workflows-piping-windows-to-linux)
-- [6. Desktop GUI & Interaction Features](#6-desktop-gui--interaction-features)
-- [7. Step-by-Step Installation Guide](#7-step-by-step-installation-guide)
-  - [7.1 Windows 10 / 11 (Recommended)](#71-windows-10--11-recommended)
-  - [7.2 Linux (Ubuntu / Debian / Arch / Fedora)](#72-linux-ubuntu--debian--arch--fedora)
-  - [7.3 macOS](#73-macos)
-  - [7.4 Terminal-Only Mode (CLI Only)](#74-terminal-only-mode-cli-only)
-- [8. System Shortcuts & Hotkeys](#8-system-shortcuts--hotkeys)
-- [9. Repository Structure](#9-repository-structure)
-- [10. Troubleshooting & FAQ](#10-troubleshooting--faq)
-- [11. Contributing & License](#11-contributing--license)
+RetroOS Terminal was developed as an operating systems course project demonstrating core systems concepts:
+
+- **Process Lifecycle & Multiprocessing**: Custom fork/exec pipeline dispatcher with asynchronous job control (`&`, `jobs`).
+- **CPU Scheduling Algorithms**: Simulated FCFS with ASCII Gantt chart generation (`sched fcfs`) and preemptive Round Robin benchmarking on real child processes (`sched real rr`).
+- **Resource Monitoring**: Live `/proc` metrics engine (`monitor`) displaying CPU percentages, virtual memory statistics, and process states.
+- **Dual OS Interoperability**: Explores bridging a Unix POSIX environment with a host Windows OS (WSL2 / DrvFs mount points, Windows drive switching, and executable dispatching).
 
 ---
 
-## 1. Executive Summary
+## 2. Technical Architecture & Honesty in Design
 
-RetroOS Terminal is a standalone, hardware-accelerated desktop terminal application designed for software engineers, systems programmers, and computer science students. 
-
-Traditional terminals force a strict choice: Windows developers must toggle between Command Prompt, PowerShell, and WSL bash windows. RetroOS Terminal bridges this divide by hosting a custom C11 Unix shell inside a frameless Electron xterm.js interface that natively understands both Windows filesystem conventions (`C:\`, `E:\`, `dir`, `cls`, `ipconfig`, direct `.exe` launches) and standard POSIX Unix pipelines (`grep`, `cat`, `sched`, `monitor`, background jobs).
-
----
-
-## 2. Architectural Overview
-
-The application is structured into three discrete execution layers:
+It is important to understand how RetroOS executes commands across systems:
 
 ```
 +---------------------------------------------------------------------------------------+
-|                                    PRESENTATION LAYER                                 |
-|         Electron v33 Runtime + xterm.js Canvas + Nerd Font Typography + WebGL         |
-|         Frameless Custom Titlebar + Dynamic Font Zoom (12px - 28px) + OLED Black      |
+|                                  ELECTRON GUI LAYER                                   |
+|                xterm.js Canvas + Frameless Titlebar + Zoom Engine (12-28px)           |
 +---------------------------------------------------------------------------------------+
                                            |
-                                [IPC PTY Bridge: node-pty]
+                                      [node-pty]
                                            |
                                            v
 +---------------------------------------------------------------------------------------+
-|                                     SHELL ENGINE                                      |
-|                 retroshell (C11 POSIX Engine with Windows Interop Layer)              |
+|                              RETROSHELL ENGINE (C11)                                  |
 |                                                                                       |
-|   - Interactive OS Boot Selector [Windows | Linux | Hybrid]                           |
-|   - Native Windows Drive Switcher (C:, E:, D:)                                        |
-|   - Path Translator: /mnt/c/Users/... <---> C:\Users\...                              |
-|   - Built-in OS Process Schedulers (FCFS & Preemptive Round Robin)                    |
-|   - Live /proc Metrics Parser & ASCII Gantt Chart Generator                           |
-|   - Automatic Windows Executable Dispatcher (.exe, .cmd)                              |
+|   1. POSIX Core Commands  -> Native fork(), execvp(), pipes, redirection               |
+|   2. CMD Aliases          -> dir (ls -lah), cls (clear), type (cat), md, rd, del       |
+|   3. Drive Switcher       -> C:, E:, D: dynamically resolved via /mnt/<drive>         |
+|   4. Dynamic Dispatcher   -> Resolves .exe & /mnt/c/Windows/System32 automatically     |
 +---------------------------------------------------------------------------------------+
                          |                                           |
                          v                                           v
 +--------------------------------------------------+ +----------------------------------+
-|               LINUX UNIX SUBSYSTEM               | |          WINDOWS HOST OS         |
-|   ext4 rootfs (/), /proc, /sys, bash utilities   | |   NTFS Drives (C:\, E:\), Apps   |
-|   gcc, make, python3, coreutils, pipes, signals  | |   Explorer, VS Code, Task Manager|
+|               LINUX ENVIRONMENT                  | |          WINDOWS SUBSYSTEM       |
+|   ext4 rootfs (/), /proc, gcc, make, coreutils   | |   NTFS /mnt/c & /mnt/e, Explorer |
+|   Native Linux child processes                   | |   Windows binaries dispatched    |
 +--------------------------------------------------+ +----------------------------------+
 ```
 
+### Clarification on Platform Support:
+- **Full Desktop GUI (Electron + retroshell)**: Supported on **Windows 10/11 using WSL2**.
+- **Native Linux / macOS**: Supports compiling and running the native CLI shell (`./retroshell`) and developer builds.
+- **Windows Command Execution**: Windows commands (`ipconfig`, `systeminfo`, `tasklist`, `explorer`) are executed via WSL2 host interop by dispatching to the underlying Windows binaries in `/mnt/c/Windows/System32`.
+
 ---
 
-## 3. Dual OS Execution Modes
+## 3. Dynamic Environment Boot Selector
 
-When launching RetroOS Terminal, the interactive **Boot Selector** allows the operator to select their operational focus. The active mode is permanently displayed on the prompt badge (`[WIN]`, `[LINUX]`, or `[HYBRID]`):
+When launching RetroOS Terminal, an interactive boot loader configures your initial working directory and prompt focus:
 
 ```text
   +-----------------------------------------------------------------------------+
   |                      R E T R O   O S   B O O T   L O A D E R                |
   |                      Select Operating Execution Environment                 |
   +-----------------------------------------------------------------------------+
-    [1] Windows Engine Mode    -> Defaults to C:\, Windows CMD toolset
-    [2] Linux Unix Engine Mode -> Defaults to ~/home, pure POSIX shell & schedulers
-    [3] Hybrid Mode (Default)  -> Simultaneous dual compatibility
+    [1] Windows Engine Mode    -> Defaults to detected Windows User Profile
+    [2] Linux Unix Engine Mode -> Defaults to Linux ~/home directory
+    [3] Hybrid Mode (Default)  -> Dual interop (Windows drives + Unix tools)
   +-----------------------------------------------------------------------------+
 ```
 
-### Dynamic In-Session Mode Switching
-
-You do not need to restart the application to transition between environments. Execute the `os` command at any time:
-
-```bash
-# Switch execution focus to Windows host environment
-os win
-
-# Switch execution focus to Linux Unix environment
-os linux
-
-# Switch execution focus to Hybrid mode
-os hybrid
-
-# Query current active environment state
-os
-```
+### In-Session Mode Switching:
+You can switch modes without restarting:
+- `os win` : Switches active directory to the host Windows User profile.
+- `os linux` : Switches active directory to the Linux user home (`~`).
+- `os hybrid` : Enables seamless dual compatibility.
+- `os` : Prints active mode diagnostics.
 
 ---
 
-## 4. Dual Filesystem Mapping (VFS)
+## 4. Real-time Filesystem Mapping (`fs` or `drives`)
 
-RetroOS provides an inspection command (`fs` or `drives`) that details how host Windows partitions correspond to the Linux Virtual Filesystem:
+Execute `fs` or `drives` to inspect dynamically detected host partitions and Unix virtual filesystems:
 
 ```text
   ================== DUAL OS FILESYSTEM MAPPING ==================
 
-  [WINDOWS HOST PARTITIONS]
-  Logical Drive   WSL Mount Point   Filesystem Type   Status
-  -------------   ---------------   ---------------   ------
-  C:\             /mnt/c            NTFS / 9p         Active (System OS)
-  E:\             /mnt/e            NTFS / 9p         Active (Project Workspace)
+  [DETECTED WINDOWS HOST PARTITIONS]
+  Drive Letter    WSL Mount Point   Filesystem Type   Status
+  ------------    ---------------   ---------------   ------
+  C:\             /mnt/c            DrvFs / 9p        Active (Accessible)
+  E:\             /mnt/e            DrvFs / 9p        Active (Accessible)
 
   [LINUX UNIX VIRTUAL FILESYSTEMS (VFS)]
   Virtual Path    Target Storage    Purpose
   ------------    --------------    -------
-  /               ext4 rootfs       Unix Root System
-  ~ (/home/...)   ext4 user home    Unix Configurations & Shell Binaries
-  /proc           procfs (memory)   Kernel Process Tree & Metrics
-  /sys            sysfs (kernel)    Device Drivers & Subsystems
+  /               rootfs            Unix Root Environment
+  ~ (/home/...)   ext4 user home    User Home Directory & Configs
+  /proc           procfs (RAM)      Kernel Virtual Process Tree & Metrics
+  /sys            sysfs (RAM)       Device Drivers & Kernel Subsystems
 ```
 
 ---
 
-## 5. Complete Command Reference
+## 5. Command Reference
 
-### 5.1 Windows CMD & System Commands
-
-RetroOS Terminal provides native alias implementations of standard Windows Command Prompt utilities:
-
-| Command | Syntax Example | Description |
+### Windows CMD Aliases & Interop Tools
+| Command | Action | Implementation |
 | :--- | :--- | :--- |
-| **Drive Switch** | `C:` or `E:` or `D:` | Instantly switch active working directory to specified Windows drive |
-| **List Directory**| `dir` or `dir /path` | Formatted file and directory listing with file sizes and timestamps |
-| **Clear Display** | `cls` | Clears terminal canvas and purges scrollback buffer |
-| **Display File**  | `type README.md` | Prints textual file contents directly to stdout |
-| **Make Directory**| `md new_folder` | Creates target directory structure (supports nested paths) |
-| **Remove Dir**    | `rd old_folder` | Removes empty directory from storage |
-| **Delete File**   | `del temp.txt` | Deletes targeted file permanently |
-| **Copy File**     | `copy src.txt dst.txt`| Copies files or directories |
-| **Move / Rename** | `ren old.txt new.txt` | Renames or moves files |
-| **Networking**    | `ipconfig` | Displays IPv4, IPv6, Subnet, and Gateway adapters |
-| **System Info**   | `systeminfo` | Detailed Windows OS version and hardware specification table |
-| **Process List**  | `tasklist` | Displays active Windows tasks, memory consumption, and PIDs |
-| **Terminate App** | `taskkill /IM notepad.exe /F` | Forcefully terminates target process by image name or PID |
-| **Launch Apps**   | `explorer .`, `code .`, `notepad` | Launches Windows GUI applications directly without appending `.exe` |
+| `C:` or `E:` or `D:` | Switch to target Windows drive | Built-in `chdir()` to `/mnt/<drive>` |
+| `dir` | List files and directories | Invokes `ls -lah --color=auto` |
+| `cls` | Clear terminal display | Clears canvas and purge scrollback buffer |
+| `type <file>` | Display text file contents | Maps to Unix `cat` |
+| `md <folder>` | Create directory | Maps to `mkdir -p` |
+| `rd <folder>` | Remove directory | Maps to `rmdir` |
+| `del <file>` | Delete file | Maps to `rm -f` |
+| `copy` / `move` / `ren` | Copy, move, or rename files | Maps to `cp -r` and `mv` |
+| `ipconfig` | Display Windows network adapters | Dispatches to `System32/ipconfig.exe` |
+| `tasklist` | Display Windows process table | Dispatches to `System32/tasklist.exe` |
+| `systeminfo` | Detailed Windows host diagnostics | Dispatches to `System32/systeminfo.exe` |
+| `explorer .` | Open Windows Explorer | Dispatches to Windows Explorer executable |
+| `code .`, `notepad` | Open GUI applications | Dispatches to host Windows binaries |
 
-### 5.2 POSIX Unix & Pipeline Commands
-
-All standard POSIX tools are supported natively:
-
-```bash
-# File inspection and pattern matching
-cat package.json | grep version
-
-# Finding files recursively across drives
-find . -name "*.c" -type f
-
-# Disk and memory usage
-df -h
-free -m
-
-# Pipelines and redirection
-cat /proc/cpuinfo | grep "model name" | uniq
-ls -lah > file_list.txt
-cat < file_list.txt
-```
-
-### 5.3 Core OS Academic & Scheduling Commands
-
-RetroOS Terminal contains a fully realized CPU scheduling simulator and benchmarking suite:
-
+### Academic & Core OS Features
 | Command | Example | Description |
 | :--- | :--- | :--- |
-| `sched fcfs` | `sched fcfs 0:5 1:3 2:8` | Non-preemptive FCFS CPU scheduling with arrival times and ASCII Gantt chart |
-| `sched real` | `sched real rr 0.5 "burn 2"` | Preemptive Round Robin scheduling executed on live child processes |
-| `monitor` | `monitor 1` | Real-time interactive CPU, RAM, and process activity monitor parsed from `/proc` |
-| `mode-switch`| `mode-switch` | Toggles simulated privilege level between Ring 3 (User) and Ring 0 (Kernel) |
-| `jobs` | `jobs` | Lists active asynchronous background jobs spawned via `&` |
-
-### 5.4 Hybrid Workflows (Piping Windows to Linux)
-
-Combine Windows system binaries with Unix utilities in a single command pipeline:
-
-```bash
-# Filter active Windows tasks through Unix grep
-tasklist | grep -i electron
-
-# Extract active IPv4 addresses from Windows ipconfig
-ipconfig | grep -i "IPv4"
-
-# Count source lines across a Windows project repository
-dir | grep -E "\.c|\.js" | wc -l
-```
+| `sched fcfs` | `sched fcfs 0:5 1:3 2:8` | Simulated FCFS CPU scheduler with ASCII Gantt chart |
+| `sched real` | `sched real rr 0.5 "burn 2"` | Real preemptive Round Robin scheduling benchmark |
+| `monitor` | `monitor 1` | Live process state, CPU, and RAM metrics parsed from `/proc` |
+| `mode-switch`| `mode-switch` | Simulated privilege level toggle between Ring 3 (User) and Ring 0 (Kernel) |
+| `jobs` | `jobs` | Table of active background asynchronous child processes |
 
 ---
 
-## 6. Desktop GUI & Interaction Features
+## 6. Installation & Execution Guide
 
-- **Pitch Black OLED Canvas**: Native `#000000` canvas background optimized for modern high-contrast monitors.
-- **Dynamic Font Zooming**: Font sizes dynamically scale between `12px` and `28px` with glyph auto-rescaling (`rescaleOverlappingGlyphs: true`) to ensure Braille halftone art never breaks or misaligns.
-- **Titlebar Telemetry**: Displays active font size indicator badge (`[A-] 15px [A+]`) alongside Sky Cyan (`−`), Emerald Green (`[ ]`), and Rose Red (`✕`) window controls.
-- **Powerline Prompt Styling**: Unicode Powerline glyphs visually segment user identity, operational mode, and formatted Windows paths.
+### Windows 10 / 11 (Full Desktop GUI)
 
----
-
-## 7. Step-by-Step Installation Guide
-
-### 7.1 Windows 10 / 11 (Recommended)
-
-#### Step 1: Ensure WSL 2 and Ubuntu are Installed
-Open **PowerShell as Administrator**:
+#### Step 1: Install WSL 2 (if not already installed)
+Open PowerShell as Administrator:
 ```powershell
 wsl --install
 ```
-*If WSL is already present, verify Ubuntu status via `wsl -l -v`.*
 
-#### Step 2: Clone Repository
+#### Step 2: Clone the Repository
 ```powershell
 git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd RetroOS_Shell
 ```
 
-#### Step 3: Compile C Shell Core
+#### Step 3: Build the C Shell
+Compile the core engine into your WSL environment:
 ```powershell
 wsl -e bash -c "mkdir -p ~/retroshell && cp retroshell.c ~/retroshell/ && cd ~/retroshell && gcc -std=c11 -Wall -o retroshell retroshell.c"
 ```
@@ -254,116 +170,39 @@ wsl -e bash -c "mkdir -p ~/retroshell && cp retroshell.c ~/retroshell/ && cd ~/r
 npm install
 .\launch.bat
 ```
-*(You can also start the application using `npm start`).*
+*(Or launch directly using `npm start`).*
 
 ---
 
-### 7.2 Linux (Ubuntu / Debian / Arch / Fedora)
+### Linux / macOS (Native CLI Mode)
+
+You can compile and run `retroshell` directly as a native Unix shell:
 
 ```bash
-# Ubuntu / Debian prerequisites
-sudo apt update && sudo apt install -y build-essential gcc make git nodejs npm
-
-# Clone repository
-git clone https://github.com/SaKin32/RetroOS_Shell.git
-cd RetroOS_Shell
-
-# Compile C binary
-make
-
-# Install dependencies and launch
-npm install
-npm start
-```
-
----
-
-### 7.3 macOS
-
-```bash
-# Install Command Line Tools & Node via Homebrew
-xcode-select --install
-brew install node
-
-# Clone and compile
 git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd RetroOS_Shell
 make
-
-# Launch desktop GUI
-npm install
-npm start
-```
-
----
-
-### 7.4 Terminal-Only Mode (CLI Only)
-
-For resource-constrained headless environments or pure SSH sessions, run the compiled binary directly without Electron:
-
-```bash
 ./retroshell
 ```
 
 ---
 
-## 8. System Shortcuts & Hotkeys
+## 7. Keyboard Shortcuts
 
 | Shortcut | Scope | Action |
 | :--- | :--- | :--- |
-| `Ctrl` + `Alt` + `T` | Global (Windows) | Instant summon/focus RetroOS Terminal from anywhere |
+| `Ctrl` + `Alt` + `T` | Global (Windows) | Summon or focus RetroOS Terminal |
 | `Ctrl` + `=` | Terminal Window | Zoom In font size (+1px) |
 | `Ctrl` + `-` | Terminal Window | Zoom Out font size (-1px) |
 | `Ctrl` + `0` | Terminal Window | Reset font size to default (15px) |
 | `Ctrl` + Mouse Wheel | Terminal Window | Smooth interactive font scaling |
-| `Ctrl` + `Shift` + `N` | Terminal Window | Spawn an isolated new terminal session window |
-| `Ctrl` + `C` | Shell Execution | Send SIGINT interrupt to active foreground process |
+| `Ctrl` + `Shift` + `N` | Terminal Window | Spawn new session window |
 
 ---
 
-## 9. Repository Structure
+## 8. License
 
-```
-RetroOS_Shell/
-├── retroshell.c       # Primary C11 shell engine (VFS parser, scheduler, command router)
-├── Makefile           # POSIX compilation specifications
-├── main.js            # Electron main process (PTY manager, window state, global hotkeys)
-├── index.html         # User Interface (xterm.js renderer, custom titlebar, zoom engine)
-├── launch.bat         # Safe Windows launcher script (clears execution barriers)
-├── icon.png           # High-resolution application artwork (512x512 PNG)
-├── icon.ico           # Multi-resolution Windows system icon file (ICO)
-├── fonts/             # Nerd Font binaries (Regular and Bold Cascadia/RetroNerd)
-├── screenshots/       # Showcase screenshots for documentation
-└── package.json       # Node package manifest and lifecycle scripts
-```
-
----
-
-## 10. Troubleshooting & FAQ
-
-**Q: Why does the terminal show `retroshell: cannot switch to drive`?**  
-A: Ensure the targeted drive letter is valid and formatted in Windows. For example, verify drive `E:\` is mounted and visible in Windows Explorer.
-
-**Q: How do I change my shell username?**  
-A: Type `user <new_name>` at any time. The shell updates your environment profile permanently.
-
-**Q: How do I switch color themes?**  
-A: Execute `theme <name>`. Available themes include `retro`, `cyber`, `matrix`, and `dracula`.
-
-**Q: The application closes immediately upon opening.**  
-A: Ensure the C binary is compiled inside WSL by executing:
-```powershell
-wsl -e bash -c "ls -la ~/retroshell/retroshell"
-```
-If missing, execute Step 3 of the Windows installation guide.
-
----
-
-## 11. Contributing & License
-
-Contributions, bug reports, and pull requests are welcomed. Please follow conventional commit guidelines when submitting contributions.
-
-Licensed under the **[MIT License](LICENSE)**.
+This project is licensed under the **[MIT License](LICENSE)**.
 
 ---
 
