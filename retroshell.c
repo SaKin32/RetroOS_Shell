@@ -2004,13 +2004,22 @@ static int bi_monitor(int argc, char **argv)
     return 0;
 }
 
+static int is_drive_letter(const char *name)
+{
+    if (!name) return 0;
+    if (isalpha((unsigned char)name[0]) && name[1] == ':' && name[2] == '\0')
+        return 1;
+    return 0;
+}
+
 static const char *BUILTIN_NAMES[] = {
-    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
+    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "cls", "dir", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
 };
 
 static int is_builtin(const char *name)
 {
     if (!name) return 0;
+    if (is_drive_letter(name)) return 1;
     for (int i = 0; BUILTIN_NAMES[i]; i++)
         if (strcmp(name, BUILTIN_NAMES[i]) == 0) return 1;
     return 0;
@@ -2020,6 +2029,18 @@ static int is_builtin(const char *name)
 static int run_builtin(int argc, char **argv, int *status)
 {
     const char *c = argv[0];
+    if (is_drive_letter(c)) {
+        char drive = tolower((unsigned char)c[0]);
+        char target_path[32];
+        snprintf(target_path, sizeof(target_path), "/mnt/%c", drive);
+        if (chdir(target_path) != 0) {
+            fprintf(stderr, "retroshell: cannot switch to drive %c: (path: %s: %s)\n", toupper((unsigned char)drive), target_path, strerror(errno));
+            *status = 1;
+        } else {
+            *status = 0;
+        }
+        return 1;
+    }
     if      (strcmp(c, "cd") == 0)          *status = bi_cd(argc, argv);
     else if (strcmp(c, "pwd") == 0)         { char b[PATH_MAX]; *status = getcwd(b, sizeof b) ? (puts(b), 0) : 1; }
     else if (strcmp(c, "help") == 0)        *status = bi_help();
@@ -2027,7 +2048,19 @@ static int run_builtin(int argc, char **argv, int *status)
     else if (strcmp(c, "mode-switch") == 0) *status = bi_mode_switch();
     else if (strcmp(c, "sched") == 0)       *status = bi_sched(argc, argv);
     else if (strcmp(c, "monitor") == 0)     *status = bi_monitor(argc, argv);
-    else if (strcmp(c, "clear") == 0)       { printf("\x1b[H\x1b[2J\x1b[3J"); fflush(stdout); *status = 0; }
+    else if (strcmp(c, "clear") == 0 || strcmp(c, "cls") == 0) { printf("\x1b[H\x1b[2J\x1b[3J"); fflush(stdout); *status = 0; }
+    else if (strcmp(c, "dir") == 0) {
+        /* Run ls with informative formatting when user types 'dir' */
+        char *ls_args[] = {"ls", "-lah", "--color=auto", NULL};
+        pid_t pid = fork();
+        if (pid == 0) {
+            execvp("ls", ls_args);
+            _exit(1);
+        }
+        int ws;
+        waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
     else if (strcmp(c, "fastfetch") == 0 || strcmp(c, "fetch") == 0) { print_banner(); fflush(stdout); *status = 0; }
     else if (strcmp(c, "export") == 0)      *status = bi_export(argc, argv);
     else if (strcmp(c, "unset") == 0)       *status = bi_unset(argc, argv);
@@ -2186,6 +2219,20 @@ static int run_pipeline(Stage *st, int n, int is_bg, const char *cmd_str)
                 _exit(status);
             }
             execvp(cmd_argv[0], cmd_argv);
+            /* If command not found, try appending Windows .exe or .cmd */
+            if (errno == ENOENT && cmd_argv[0] && !strchr(cmd_argv[0], '.')) {
+                char win_cmd[PATH_MAX];
+                snprintf(win_cmd, sizeof(win_cmd), "%s.exe", cmd_argv[0]);
+                char *orig0 = cmd_argv[0];
+                cmd_argv[0] = win_cmd;
+                execvp(win_cmd, cmd_argv);
+
+                snprintf(win_cmd, sizeof(win_cmd), "%s.cmd", orig0);
+                cmd_argv[0] = win_cmd;
+                execvp(win_cmd, cmd_argv);
+
+                cmd_argv[0] = orig0;
+            }
             /* only reached if exec failed */
             if (errno == ENOENT) fprintf(stderr, "retroshell: %s: command not found\n", cmd_argv[0]);
             else                 fprintf(stderr, "retroshell: %s: %s\n", cmd_argv[0], strerror(errno));
