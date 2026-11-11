@@ -2,14 +2,14 @@ const electron = require('electron');
 const { app, BrowserWindow, ipcMain } = electron;
 const pty = require('@lydell/node-pty');
 
-// Ekta-i app process thakbe. Dwitiyo-bar `npm start` dile notun process
-// khulbe na, ager app-e ekta notun window khulbe.
+// Ensure a single instance of the application. If another instance is launched,
+// focus the existing instance and open a new window rather than spawning a new process.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  // prottek window-er nijer shell (pty) thake
-  const sessions = new Map();   // webContents.id -> { win, term }
+  // Map each window's webContents ID to its terminal session: webContents.id -> { win, term }
+  const sessions = new Map();
 
   function createWindow() {
     const base = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
@@ -21,7 +21,7 @@ if (!gotLock) {
       minWidth: 480,
       minHeight: 300,
       ...pos,
-      frame: false,            // Windows-er title bar o border thakbe na
+      frame: false,            // Frameless window without OS-native title bar or borders
       backgroundColor: '#000000',
       webPreferences: {
         nodeIntegration: true,
@@ -45,7 +45,7 @@ if (!gotLock) {
   app.whenReady().then(createWindow);
   app.on('window-all-closed', () => app.quit());
 
-  // ---- Shell (WSL) ----
+  // ---- Shell Process Management (WSL) ----
   ipcMain.on('pty-start', (e, size) => {
     const s = sessions.get(e.sender.id);
     if (!s || s.term) return;
@@ -57,18 +57,18 @@ if (!gotLock) {
     });
     s.term.onData((d) => { if (!s.win.isDestroyed()) s.win.webContents.send('pty-data', d); });
     s.term.onExit(() => {
-      s.term = null;                              // PTY exit hoyegele null kore dao
-      if (!s.win.isDestroyed()) s.win.close();   // shell bondho -> window bondho
+      s.term = null;                              // Clear reference upon PTY exit
+      if (!s.win.isDestroyed()) s.win.close();   // Close corresponding window when shell terminates
     });
   });
   ipcMain.on('pty-input', (e, d) => { const s = sessions.get(e.sender.id); if (s && s.term) s.term.write(d); });
   ipcMain.on('pty-resize', (e, z) => {
     const s = sessions.get(e.sender.id);
-    // PTY already exit hoye gele resize korba na - nahole crash
+    // Prevent resizing an exited PTY to avoid native exception
     if (s && s.term) { try { s.term.resize(z.cols, z.rows); } catch (_) { } }
   });
 
-  // ---- Window buttons ----
+  // ---- Window Controls ----
   const winOf = (e) => BrowserWindow.fromWebContents(e.sender);
   ipcMain.on('win-min', (e) => winOf(e).minimize());
   ipcMain.on('win-max', (e) => { const w = winOf(e); w.isMaximized() ? w.unmaximize() : w.maximize(); });
