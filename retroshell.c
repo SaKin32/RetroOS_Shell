@@ -29,6 +29,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/utsname.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/select.h>
@@ -106,7 +109,7 @@ static OperatingMode g_os_mode = OS_MODE_HYBRID;
 
 static const char *get_dynamic_windows_home(char *buf, size_t sz)
 {
-    /* Check Windows USERPROFILE environment variable if forwarded */
+    /* 1. Check Windows USERPROFILE environment variable if forwarded */
     const char *prof = getenv("USERPROFILE");
     if (prof && *prof) {
         if (isalpha((unsigned char)prof[0]) && prof[1] == ':') {
@@ -120,7 +123,24 @@ static const char *get_dynamic_windows_home(char *buf, size_t sz)
         }
     }
 
-    /* Fallback: Scan /mnt/c/Users/ for actual usernames excluding system folders */
+    /* 2. Execute cmd.exe to query the exact active Windows username without guessing */
+    FILE *fp = popen("/mnt/c/Windows/System32/cmd.exe /c echo %USERNAME% 2>/dev/null", "r");
+    if (fp) {
+        char win_user[128];
+        if (fgets(win_user, sizeof(win_user), fp)) {
+            size_t l = strlen(win_user);
+            while (l > 0 && (win_user[l - 1] == '\r' || win_user[l - 1] == '\n' || isspace((unsigned char)win_user[l - 1])))
+                win_user[--l] = '\0';
+            if (l > 0 && win_user[0] != '%') {
+                snprintf(buf, sz, "/mnt/c/Users/%s", win_user);
+                pclose(fp);
+                if (access(buf, F_OK) == 0) return buf;
+            }
+        }
+        pclose(fp);
+    }
+
+    /* 3. Fallback: Scan /mnt/c/Users/ for actual usernames excluding system folders */
     DIR *d = opendir("/mnt/c/Users");
     if (d) {
         struct dirent *ent;
@@ -138,7 +158,7 @@ static const char *get_dynamic_windows_home(char *buf, size_t sz)
         closedir(d);
     }
 
-    /* If not running on WSL with /mnt/c, fallback to Linux HOME or cwd */
+    /* 4. If not running on WSL with /mnt/c, fallback to Linux HOME or cwd */
     const char *h = getenv("HOME");
     if (h && *h) return h;
     return ".";
@@ -447,6 +467,37 @@ static void print_banner(void)
     int ncpu = 1;
     get_banner_stats(up_str, sizeof(up_str), mem_str, sizeof(mem_str), &ncpu);
 
+    /* Dynamically read Kernel, Hostname and local IP */
+    char kernel_ver[256] = "Linux";
+    struct utsname u_info;
+    if (uname(&u_info) == 0) {
+        snprintf(kernel_ver, sizeof(kernel_ver), "%s %s", u_info.sysname, u_info.release);
+    }
+
+    char host_name[128] = "RetroTerminal";
+    if (gethostname(host_name, sizeof(host_name)) != 0) {
+        strncpy(host_name, "RetroHost", sizeof(host_name) - 1);
+    }
+
+    char local_ip[64] = "127.0.0.1";
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock >= 0) {
+        struct sockaddr_in loopback;
+        memset(&loopback, 0, sizeof(loopback));
+        loopback.sin_family = AF_INET;
+        loopback.sin_addr.s_addr = inet_addr("8.8.8.8");
+        loopback.sin_port = htons(53);
+        if (connect(sock, (struct sockaddr *)&loopback, sizeof(loopback)) == 0) {
+            struct sockaddr_in name;
+            socklen_t namelen = sizeof(name);
+            if (getsockname(sock, (struct sockaddr *)&name, &namelen) == 0) {
+                const char *p = inet_ntop(AF_INET, &name.sin_addr, local_ip, sizeof(local_ip));
+                if (!p) strncpy(local_ip, "127.0.0.1", sizeof(local_ip) - 1);
+            }
+        }
+        close(sock);
+    }
+
     printf("\n");
     /* Side-by-side: Exact Halftone Braille Purple Cat (Left) + System stats tree (Right) */
     /* Line 0 */
@@ -469,7 +520,7 @@ static void print_banner(void)
     /* Line 4 */
     set_fg(CAT_PURP); printf("%s  ", CAT_BRAILLE_LINES[4]);
     set_fg(STAT_SYS); printf("  |-- Kernel  -> ");
-    set_fg(WHITE);    printf("Linux x86_64\n");
+    set_fg(WHITE);    printf("%s\n", kernel_ver);
 
     /* Line 5 */
     set_fg(CAT_PURP); printf("%s  ", CAT_BRAILLE_LINES[5]);
@@ -518,7 +569,7 @@ static void print_banner(void)
     /* Line 15 */
     set_fg(CAT_PURP); printf("%s  ", CAT_BRAILLE_LINES[15]);
     set_fg(STAT_HW);  printf("  |-- Host    -> ");
-    set_fg(WHITE);    printf("RetroTerminal Engine\n");
+    set_fg(WHITE);    printf("%s\n", host_name);
 
     /* Line 16 */
     set_fg(CAT_PURP); printf("%s  ", CAT_BRAILLE_LINES[16]);
@@ -533,7 +584,7 @@ static void print_banner(void)
     /* Line 18 */
     printf("                                              ");
     set_fg(STAT_HW);  printf("  |-- IP      -> ");
-    set_fg(WHITE);    printf("127.0.0.1 (Localhost)\n");
+    set_fg(WHITE);    printf("%s\n", local_ip);
 
     /* Line 19 */
     printf("                                              \n");
@@ -897,63 +948,77 @@ typedef enum {
 } ChainOp;
 
 typedef struct {
-    int start_tok;
-    int end_tok;
+    char *cmd_str;
     ChainOp next_op;
     int is_bg;
-} CommandEntry;
+} LineSegment;
 
-/* Splits tokens into command entries by chaining operators (; , && , || , &). */
-static int parse_chain(char **tok, int *isop, int n, CommandEntry *entries, int *n_entries)
+/* Split input line into command segments separated by ;, &&, ||, & */
+static int split_line_segments(const char *line, LineSegment *segs, int max_segs)
 {
-    int num = 0;
-    int start = 0;
+    int count = 0;
+    const char *start = line;
+    const char *p = line;
+    char quote = 0;
 
-    for (int i = 0; i < n; i++) {
-        if (!isop[i]) continue;
+    while (*p) {
+        if (quote) {
+            if (*p == quote) quote = 0;
+            else if (quote == '"' && *p == '\\' && p[1] != '\0') p++;
+            p++;
+            continue;
+        }
+
+        if (*p == '\'' || *p == '"') {
+            quote = *p++;
+            continue;
+        }
 
         ChainOp op = OP_NONE;
-        if (strcmp(tok[i], ";") == 0)       op = OP_SEQ;
-        else if (strcmp(tok[i], "&&") == 0) op = OP_AND;
-        else if (strcmp(tok[i], "||") == 0) op = OP_OR;
-        else if (strcmp(tok[i], "&") == 0)  op = OP_BG;
+        int op_len = 0;
+
+        if (*p == ';') {
+            op = OP_SEQ; op_len = 1;
+        } else if (*p == '&') {
+            if (p[1] == '&') { op = OP_AND; op_len = 2; }
+            else if (p[1] != '>') { op = OP_BG; op_len = 1; }
+        } else if (*p == '|' && p[1] == '|') {
+            op = OP_OR; op_len = 2;
+        }
 
         if (op != OP_NONE) {
-            if (i == start) {
-                fprintf(stderr, "retroshell: syntax error near unexpected token '%s'\n", tok[i]);
-                return -1;
-            }
-            if (num >= MAX_COMMANDS) {
-                fprintf(stderr, "retroshell: too many chained commands (max %d)\n", MAX_COMMANDS);
-                return -1;
-            }
-            entries[num].start_tok = start;
-            entries[num].end_tok = i;
-            entries[num].next_op = op;
-            entries[num].is_bg = (op == OP_BG);
-            num++;
-            start = i + 1;
+            if (count >= max_segs) break;
+            size_t seg_len = (size_t)(p - start);
+            char *sub = malloc(seg_len + 1);
+            if (!sub) return -1;
+            memcpy(sub, start, seg_len);
+            sub[seg_len] = '\0';
+
+            segs[count].cmd_str = sub;
+            segs[count].next_op = op;
+            segs[count].is_bg = (op == OP_BG);
+            count++;
+
+            p += op_len;
+            start = p;
+            continue;
         }
+        p++;
     }
 
-    if (start < n) {
-        if (num >= MAX_COMMANDS) {
-            fprintf(stderr, "retroshell: too many chained commands (max %d)\n", MAX_COMMANDS);
-            return -1;
-        }
-        entries[num].start_tok = start;
-        entries[num].end_tok = n;
-        entries[num].next_op = OP_NONE;
-        entries[num].is_bg = 0;
-        num++;
-    } else if (num > 0 && entries[num - 1].next_op != OP_SEQ && entries[num - 1].next_op != OP_BG) {
-        const char *opstr = (entries[num - 1].next_op == OP_AND) ? "&&" : "||";
-        fprintf(stderr, "retroshell: syntax error near unexpected token '%s'\n", opstr);
-        return -1;
-    }
+    if (start < p && count < max_segs) {
+        size_t seg_len = (size_t)(p - start);
+        char *sub = malloc(seg_len + 1);
+        if (!sub) return -1;
+        memcpy(sub, start, seg_len);
+        sub[seg_len] = '\0';
 
-    *n_entries = num;
-    return 0;
+        segs[count].cmd_str = sub;
+        segs[count].next_op = OP_NONE;
+        segs[count].is_bg = 0;
+        count++;
+    }
+    return count;
 }
 
 /* Open the < and > files and plug them into stdin / stdout. */
@@ -2976,31 +3041,17 @@ int main(int argc, char **argv)
             continue;
         }
 
-        size_t buf_sz = 16384 + (size_t)len * 4;
-        char *buf = malloc(buf_sz);
-        if (!buf) { perror("retroshell: malloc"); free(line); continue; }
-
-        char *tok[MAX_ARGS];
-        int   isop[MAX_ARGS];
-        int   isglob[MAX_ARGS];
-        int n = tokenize(line, buf, buf_sz, tok, isop, isglob, MAX_ARGS);
-        if (n < 0) { last_status = 2; pool_free_all(); free(buf); free(line); continue; }
-        if (n == 0) { pool_free_all(); free(buf); free(line); continue; }
-
-        CommandEntry entries[MAX_COMMANDS];
-        int n_entries = 0;
-        if (parse_chain(tok, isop, n, entries, &n_entries) < 0) {
-            last_status = 2;
-            pool_free_all();
-            free(buf);
+        LineSegment segs[MAX_COMMANDS];
+        int num_segs = split_line_segments(line, segs, MAX_COMMANDS);
+        if (num_segs <= 0) {
             free(line);
             continue;
         }
 
         int run_cmd = 1;
-        for (int c = 0; c < n_entries; c++) {
+        for (int c = 0; c < num_segs; c++) {
             if (c > 0) {
-                ChainOp prev_op = entries[c - 1].next_op;
+                ChainOp prev_op = segs[c - 1].next_op;
                 if (prev_op == OP_SEQ || prev_op == OP_BG) {
                     run_cmd = 1;
                 } else if (prev_op == OP_AND) {
@@ -3010,25 +3061,49 @@ int main(int argc, char **argv)
                 }
             }
 
-            if (!run_cmd) continue;
+            if (!run_cmd) {
+                free(segs[c].cmd_str);
+                continue;
+            }
 
-            int count = entries[c].end_tok - entries[c].start_tok;
-            if (count <= 0) continue;
+            /* Tokenize and expand variables JUST-IN-TIME right before execution */
+            size_t seg_buf_sz = 16384 + strlen(segs[c].cmd_str) * 4;
+            char *seg_buf = malloc(seg_buf_sz);
+            if (!seg_buf) {
+                free(segs[c].cmd_str);
+                continue;
+            }
 
-            char cmd_str[128];
-            format_cmd_string(tok, entries[c].start_tok, entries[c].end_tok, cmd_str, sizeof(cmd_str));
+            char *tok[MAX_ARGS];
+            int   isop[MAX_ARGS];
+            int   isglob[MAX_ARGS];
+            int n = tokenize(segs[c].cmd_str, seg_buf, seg_buf_sz, tok, isop, isglob, MAX_ARGS);
+            if (n <= 0) {
+                pool_free_all();
+                free(seg_buf);
+                free(segs[c].cmd_str);
+                continue;
+            }
 
             Stage st[MAX_STAGES];
             int nst = 0;
-            if (build_pipeline(&tok[entries[c].start_tok], &isop[entries[c].start_tok], &isglob[entries[c].start_tok], count, st, &nst) < 0) {
+            if (build_pipeline(tok, isop, isglob, n, st, &nst) < 0) {
                 last_status = 2;
+                pool_free_all();
+                free(seg_buf);
+                free(segs[c].cmd_str);
                 break;
             }
 
-            last_status = run_pipeline(st, nst, entries[c].is_bg, cmd_str);
+            char cmd_str[128];
+            format_cmd_string(tok, 0, n, cmd_str, sizeof(cmd_str));
+
+            last_status = run_pipeline(st, nst, segs[c].is_bg, cmd_str);
+
+            pool_free_all();
+            free(seg_buf);
+            free(segs[c].cmd_str);
         }
-        pool_free_all();
-        free(buf);
         free(line);
     }
     return last_status;

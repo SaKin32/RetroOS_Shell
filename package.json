@@ -1,6 +1,6 @@
 {
   "name": "retroos-terminal",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "RetroOS standalone terminal",
   "main": "main.js",
   "scripts": {

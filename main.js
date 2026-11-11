@@ -26,8 +26,9 @@ if (!gotLock) {
       backgroundColor: '#000000',
       icon: path.join(__dirname, 'icon.png'),
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true
       }
     });
     win.setMenuBarVisibility(false);

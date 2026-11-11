@@ -123,9 +123,7 @@
   <div id="terminal"></div>
 
 <script>
-  const { ipcRenderer } = require('electron');
-  const { Terminal } = require('@xterm/xterm');
-  const { FitAddon } = require('@xterm/addon-fit');
+  const { Terminal, FitAddon, send: ipcSend, on: ipcOn } = window.electronAPI;
 
   // Load saved font size or default to 15
   let currentFontSize = parseInt(localStorage.getItem('retro_font_size'), 10) || 15;
@@ -162,19 +160,19 @@
   ]).catch(() => {}).then(() => {
     term.open(document.getElementById('terminal'));
     fit.fit();
-    ipcRenderer.send('pty-start', { cols: term.cols, rows: term.rows });
+    ipcSend('pty-start', { cols: term.cols, rows: term.rows });
     term.focus();
   });
 
-  ipcRenderer.on('pty-data', (e, d) => term.write(d));
-  term.onData((d) => ipcRenderer.send('pty-input', d));
+  ipcOn('pty-data', (d) => term.write(d));
+  term.onData((d) => ipcSend('pty-input', d));
 
   let fitTimeout = null;
   function doFit() {
     try {
       fit.fit();
       if (term.cols && term.rows) {
-        ipcRenderer.send('pty-resize', { cols: term.cols, rows: term.rows });
+        ipcSend('pty-resize', { cols: term.cols, rows: term.rows });
       }
       term.refresh(0, term.rows - 1);
     } catch (_) {}
@@ -229,13 +227,13 @@
   term.attachCustomKeyEventHandler((ev) => {
     if (ev.type === 'keydown') {
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyN') {
-        ipcRenderer.send('new-window'); return false;
+        ipcSend('new-window'); return false;
       }
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyC') {
         navigator.clipboard.writeText(term.getSelection()); return false;
       }
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyV') {
-        navigator.clipboard.readText().then((t) => ipcRenderer.send('pty-input', t)); return false;
+        navigator.clipboard.readText().then((t) => ipcSend('pty-input', t)); return false;
       }
       // Font zoom keys
       if (ev.ctrlKey && (ev.key === '=' || ev.key === '+' || ev.code === 'NumpadAdd')) {
@@ -252,12 +250,12 @@
   });
 
   // Window buttons
-  document.getElementById('min').onclick = () => ipcRenderer.send('win-min');
-  document.getElementById('max').onclick = () => ipcRenderer.send('win-max');
-  document.getElementById('close').onclick = () => ipcRenderer.send('win-close');
-  document.getElementById('d-close').onclick = () => ipcRenderer.send('win-close');
-  document.getElementById('d-min').onclick = () => ipcRenderer.send('win-min');
-  document.getElementById('d-max').onclick = () => ipcRenderer.send('win-max');
+  document.getElementById('min').onclick = () => ipcSend('win-min');
+  document.getElementById('max').onclick = () => ipcSend('win-max');
+  document.getElementById('close').onclick = () => ipcSend('win-close');
+  document.getElementById('d-close').onclick = () => ipcSend('win-close');
+  document.getElementById('d-min').onclick = () => ipcSend('win-min');
+  document.getElementById('d-max').onclick = () => ipcSend('win-max');
 </script>
 </body>
 </html>
