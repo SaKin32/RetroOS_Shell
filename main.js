@@ -1,5 +1,5 @@
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain } = electron;
+const { app, BrowserWindow, ipcMain, globalShortcut } = electron;
 const pty = require('@lydell/node-pty');
 
 // Ensure a single instance of the application. If another instance is launched,
@@ -42,7 +42,22 @@ if (!gotLock) {
   }
 
   app.on('second-instance', () => createWindow());
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    createWindow();
+    // Register global hotkey: Ctrl+Alt+T toggles or opens a new window from anywhere in Windows
+    globalShortcut.register('CommandOrControl+Alt+T', () => {
+      const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+      if (win) {
+        if (win.isMinimized()) win.restore();
+        win.focus();
+      } else {
+        createWindow();
+      }
+    });
+  });
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+  });
   app.on('window-all-closed', () => app.quit());
 
   // ---- Shell Process Management (WSL) ----
