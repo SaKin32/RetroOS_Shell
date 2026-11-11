@@ -11,8 +11,8 @@
 
 **A Next-Generation Cyberpunk Desktop Terminal Environment**
 
-*Custom C Shell Engine · Dual Unix & Windows Command Interop · Braille Halftone Fastfetch*
-*CPU Process Scheduler · Powerline Prompt · Multi-platform Electron GUI*
+*Native Windows CMD & Linux OS Hybrid Architecture · Braille Halftone Fastfetch*
+*Direct Drive Switching · CPU Process Scheduler · Powerline Prompt · Electron OLED Canvas*
 
 </div>
 
@@ -29,8 +29,8 @@
 
 ---
 
-### Interactive Cyber Purple Shell Session
-> *Instant transition to the shell — featuring the 18-line Braille Cyber Purple Cat, live hardware stats, and a powerline prompt.*
+### Interactive Cyber Purple Shell Session (Windows Prompt)
+> *Displays paths in authentic Windows style (`C:\Users\...` or `E:\...`) with the 18-line Braille Cyber Purple Cat and hardware analytics.*
 
 ![Shell Session](screenshots/t2.png)
 
@@ -38,213 +38,193 @@
 
 ---
 
-## Overview: Dual Command Workflow (Linux OS + Windows OS)
+## Architecture: Windows CMD + Linux OS Dual Compatibility
 
-RetroOS Terminal bridges Unix and Windows environments. It runs an interactive C11 shell with an Electron-powered front end while allowing seamless execution of both native Unix/Linux commands and Windows applications and commands in the same session.
+RetroOS Terminal combines the power of a POSIX Unix shell engine with the familiar commands and path styling of Windows Command Prompt (CMD) and PowerShell.
 
 ```
-+-----------------------------------------------------------------------+
-|                         RetroOS Terminal GUI                          |
-|         (xterm.js + Electron frameless OLED canvas + Font Zoom)       |
-+-----------------------------------------------------------------------+
-                                   |
-                                   v
-+-----------------------------------------------------------------------+
-|                    retroshell (Interactive C Shell)                   |
-|     Pipelines | Redirection | Job Control | Scheduler | Monitor       |
-+-----------------------------------------------------------------------+
-             |                                              |
-             v                                              v
-+--------------------------+                  +-------------------------+
-|     Unix / OS Engine     |                  |   Windows Interop Layer |
-| ls, grep, cat, make, gcc |                  | explorer.exe, code, git |
-| sched, monitor, pipes    |                  | powershell.exe, cmd.exe |
-+--------------------------+                  +-------------------------+
++-------------------------------------------------------------------------------+
+|                             RetroOS Terminal GUI                              |
+|           (Frameless OLED canvas + Font Zoom + Cyberpunk Titlebar)            |
++-------------------------------------------------------------------------------+
+                                        |
+                                        v
++-------------------------------------------------------------------------------+
+|                       retroshell (Hybrid C Shell Engine)                      |
+|                                                                               |
+|   Windows Prompt Formatter:  C:\Users\<user>  |  E:\project                   |
+|   Direct Drive Switching:    C:  |  E:  |  D:                                 |
+|   Windows CMD Aliases:       dir, cls, type, md, rd, del, copy, move, ren    |
+|   POSIX Unix Core:           pipes (|), redirection (< >), jobs (&), sched    |
+|   Automatic .exe Dispatcher: notepad, explorer, code, tasklist, ipconfig       |
++-------------------------------------------------------------------------------+
+                  |                                             |
+                  v                                             v
+     +--------------------------+                  +-------------------------+
+     |   Native Unix Tools      |                  |   Windows Application   |
+     | grep, cat, make, gcc, ls |                  | Explorer, VS Code, Git  |
+     | FCFS & RR Schedulers     |                  | PowerShell & CMD Tools  |
+     +--------------------------+                  +-------------------------+
 ```
 
 ---
 
-## How to Use Windows & OS Commands Together
+## Windows CMD Command Reference & Quick Guide
 
-Once RetroOS Terminal launches, the default working directory is set to your Windows User Home (for example, `C:\Users\<username>`). You can execute Unix terminal utilities, RetroOS built-in commands, and Windows `.exe` tools interchangeably.
+You do not need to learn separate commands. You can use standard Windows CMD commands, PowerShell commands, and Linux utilities interchangeably in the same session.
 
-### 1. Navigating Windows Drives and Directories
+### 1. Drive Switching & Windows Paths
 
-Windows drives are mounted under `/mnt/` inside the shell environment:
+Switch drives directly like Windows CMD:
 
-| Windows Location | Command in RetroOS Shell |
-| :--- | :--- |
-| Your Windows User Profile | `cd ~` or `cd /mnt/c/Users/<your_username>` |
-| Root of Drive C: | `cd /mnt/c` |
-| Root of Drive E: | `cd /mnt/e` |
-| View current directory files | `ls -la` |
-| Print working directory path | `pwd` |
+```cmd
+> E:
+# Automatically switches prompt to E:\
 
-### 2. Running Windows Applications & GUI Tools
+> C:
+# Automatically switches prompt to C:\
+```
 
-You can launch native Windows software directly from the command prompt:
+Paths in the prompt are automatically formatted in standard Windows syntax:
+```text
+comando_32@retros  C:\Users\mdsho  >
+comando_32@retros  E:\retroos-terminal  >
+```
+
+### 2. Windows CMD File and Directory Operations
+
+| Action | Windows CMD Command | Linux Equivalent | Result |
+| :--- | :--- | :--- | :--- |
+| Clear screen | `cls` | `clear` | Clears terminal canvas |
+| List files | `dir` | `ls -lah` | Lists files and directories with colors |
+| View file text | `type README.md` | `cat README.md` | Prints file contents to screen |
+| Create directory | `md my_folder` | `mkdir -p my_folder` | Creates folder |
+| Remove directory | `rd my_folder` | `rmdir my_folder` | Deletes directory |
+| Delete file | `del file.txt` | `rm -f file.txt` | Removes file |
+| Copy files | `copy a.txt b.txt` | `cp -r a.txt b.txt` | Copies file or directory |
+| Rename / Move | `ren old.txt new.txt` | `mv old.txt new.txt` | Renames or moves file |
+| Navigate directory | `cd ..` or `cd \` | `cd ..` | Changes current directory |
+
+### 3. Launching Windows Software (No .exe Required)
+
+Windows software and GUI applications can be launched directly without typing `.exe`:
 
 ```bash
 # Open current directory in Windows File Explorer
-explorer.exe .
+explorer .
 
-# Open a specific file in Windows Notepad
-notepad.exe notes.txt
+# Open file in Windows Notepad
+notepad notes.txt
 
-# Open the current folder in Visual Studio Code
+# Launch Visual Studio Code
 code .
 
 # Launch Windows Task Manager
-taskmgr.exe
+taskmgr
 
 # Open Windows Calculator
-calc.exe
+calc
 ```
 
-### 3. Running Windows Developer & CLI Tools
+### 4. Windows Networking & System Diagnostics
 
-Tools installed in Windows (such as Git, Python, Node.js, and Docker) can be invoked directly by adding `.exe` or via their standard names:
+Run native Windows administrative tools directly from the prompt:
 
 ```bash
-# Windows Git version & status
-git.exe status
-git.exe log --oneline -5
+# Display network configuration
+ipconfig
 
-# Windows Python runtime
-python.exe script.py
+# Detailed system summary
+systeminfo
 
-# Windows Node & NPM
-node.exe -v
-npm.cmd -v
+# List running Windows processes
+tasklist
 
-# Windows Docker CLI
-docker.exe ps
+# Terminate process by name or PID
+taskkill /IM notepad.exe /F
+
+# Ping host
+ping google.com
 ```
 
-### 4. Running Native Windows PowerShell and CMD Commands
+### 5. Advanced Hybrid Workflows: Windows + Linux Pipes
 
-If you need native Windows commands (such as `ipconfig`, `systeminfo`, or PowerShell cmdlets), run them through `cmd.exe` or `powershell.exe`:
-
-```bash
-# Check network configuration using Windows ipconfig
-cmd.exe /c ipconfig
-
-# Check running Windows processes
-cmd.exe /c tasklist
-
-# Execute any PowerShell command or script
-powershell.exe -Command "Get-Service | Where-Object {$_.Status -eq 'Running'}"
-powershell.exe -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10"
-
-# Open interactive Windows PowerShell session inside RetroOS
-powershell.exe
-
-# Open interactive Windows CMD session inside RetroOS
-cmd.exe
-```
-
-### 5. Running Native Unix / Linux OS Commands
-
-All standard Unix tools and RetroOS features run natively:
+Combine Windows system commands with Unix text-filtering utilities:
 
 ```bash
-# File inspection and text processing
-cat package.json | grep version
-find . -name "*.js" -type f
+# Filter Windows process list using Unix grep
+tasklist | grep -i electron
 
-# System resource monitor
-free -m
-uptime
+# Find specific network adapters from ipconfig
+ipconfig | grep -i IPv4
 
-# Chained pipelines and redirection
-ls -lh | sort -k 5 -h
-cat /proc/cpuinfo | grep "model name" | uniq
-```
-
-### 6. Mixing Unix Utilities with Windows Output (Piping & Filtering)
-
-You can pass output from Windows binaries directly into Unix text utilities:
-
-```bash
-# Filter Windows tasklist through Unix grep
-cmd.exe /c tasklist | grep -i "electron"
-
-# Search Windows IP configuration with grep
-cmd.exe /c ipconfig | grep -i "IPv4"
-
-# Sort Windows directory listings using Unix utilities
-cmd.exe /c dir | grep -E "(DIR)"
+# Search inside file listing
+dir | grep -i "\.json"
 ```
 
 ---
 
-## Feature Highlights
+## Built-in Shell Commands Reference
 
-| Category | Feature |
-| :--- | :--- |
-| **Dual OS Workflow** | Run native Unix commands and Windows executables simultaneously |
-| **Shell Engine** | Full POSIX-style C shell: fork/exec, pipelines, redirection, background jobs, globbing |
-| **Process Scheduler** | FCFS & Round Robin CPU scheduler with ASCII Gantt chart; real benchmark mode |
-| **System Monitor** | Live CPU, RAM, and process stats dashboard (`monitor`) |
-| **Fastfetch Banner** | 18-line Braille halftone Cyber Purple Cat + hardware analytics tree |
-| **User Identity** | Personalized `username@retros` prompt, stored in `~/.retroshell_user` |
-| **Desktop GUI** | Electron v33 + xterm.js — OLED black canvas, custom titlebar, font zoom |
-| **Font Zoom** | `Ctrl + =` / `Ctrl + -` / `Ctrl + 0` and `Ctrl + MouseWheel` |
-| **Themes** | `retro` · `cyber` · `matrix` · `dracula` |
-| **Kernel Mode** | Simulated Ring 3 to Ring 0 privilege switcher (`mode-switch`) |
+| Command | Syntax | Description |
+| :--- | :--- | :--- |
+| `help` | `help` | Display list of all available commands |
+| `welcome` | `welcome` | Open the interactive welcome and profile screen |
+| `user` | `user [name]` | View or update your `@retros` shell profile |
+| `theme` | `theme <name>` | Switch theme: `retro`, `cyber`, `matrix`, `dracula` |
+| `monitor` | `monitor [sec]` | Real-time CPU, RAM, and process activity monitor |
+| `sched` | `sched fcfs 0:5 1:3` | Run FCFS CPU scheduling with ASCII Gantt chart |
+| `sched real` | `sched real rr 0.5 "burn 2"` | Run real preemptive Round Robin benchmark |
+| `mode-switch` | `mode-switch` | Toggle simulated Ring 3 User and Ring 0 Kernel modes |
+| `cls` / `clear` | `cls` | Clear terminal display |
+| `exit` | `exit` | Gracefully terminate shell session |
 
 ---
 
 ## Installation & Setup
 
-Choose your platform below.
+Choose your operating system below.
 
 ---
 
-### Windows (Recommended Full Dual-OS Experience)
+### Windows (Full Hybrid Experience)
 
 <details>
 <summary><b>Expand Windows Setup Guide</b></summary>
 
 #### Prerequisites
 
-| Tool | Download |
+| Tool | Link / Guide |
 | :--- | :--- |
-| WSL 2 (Windows Subsystem for Linux) | [Microsoft Docs](https://learn.microsoft.com/en-us/windows/wsl/install) |
+| WSL 2 (Windows Subsystem for Linux) | [Microsoft Documentation](https://learn.microsoft.com/en-us/windows/wsl/install) |
 | Ubuntu (via WSL) | Microsoft Store — search "Ubuntu" |
 | Node.js 18+ | [nodejs.org](https://nodejs.org/) |
 | Git | [git-scm.com](https://git-scm.com/) |
 
 #### Step 1 — Install WSL (if not already installed)
 
-Open **PowerShell as Administrator** and run:
+Open **PowerShell as Administrator**:
 
 ```powershell
 wsl --install
 ```
 
-Restart your computer when prompted, then complete your Ubuntu username/password setup.
+Restart your computer if prompted and complete your Ubuntu username/password setup.
 
-#### Step 2 — Clone the repository
+#### Step 2 — Clone the Repository
 
 ```powershell
 git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd RetroOS_Shell
 ```
 
-#### Step 3 — Compile the C Shell binary inside WSL
+#### Step 3 — Compile the C Shell binary in WSL
 
 ```powershell
-wsl -e bash -c "cd ~/retroshell && gcc -std=c11 -Wall -o retroshell retroshell.c"
+wsl -e bash -c "mkdir -p ~/retroshell && cp retroshell.c ~/retroshell/ && cd ~/retroshell && gcc -std=c11 -Wall -o retroshell retroshell.c"
 ```
 
-> If `~/retroshell` does not exist in WSL, copy `retroshell.c` to it:
-> ```powershell
-> wsl -e bash -c "mkdir -p ~/retroshell"
-> wsl -e bash -c "cp /mnt/e/retroos-terminal/retroshell.c ~/retroshell/"
-> ```
-
-#### Step 4 — Install dependencies
+#### Step 4 — Install Node.js dependencies
 
 ```powershell
 npm install
@@ -252,9 +232,11 @@ npm install
 
 #### Step 5 — Launch the application
 
-Double-click `launch.bat` or run:
+Launch via the safe Windows batch file or npm:
 
 ```powershell
+.\launch.bat
+# or
 npm start
 ```
 
@@ -267,23 +249,17 @@ npm start
 <details>
 <summary><b>Expand macOS Setup Guide</b></summary>
 
-#### Prerequisites
-
 ```bash
+# Install dependencies
 xcode-select --install
 brew install node
-```
 
-#### Setup & Launch
-
-```bash
+# Clone and compile
 git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd RetroOS_Shell
-
-# Compile C binary
 make
 
-# Install Node modules & launch
+# Install Node modules & start
 npm install
 npm start
 ```
@@ -297,53 +273,21 @@ npm start
 <details>
 <summary><b>Expand Linux Setup Guide</b></summary>
 
-#### Prerequisites (Ubuntu / Debian / Mint)
-
 ```bash
-sudo apt update && sudo apt install -y build-essential gcc make git curl
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-```
+# Ubuntu / Debian
+sudo apt update && sudo apt install -y build-essential gcc make git nodejs npm
 
-#### Setup & Launch
-
-```bash
+# Clone and compile
 git clone https://github.com/SaKin32/RetroOS_Shell.git
 cd RetroOS_Shell
-
 make
+
+# Install Node modules & start
 npm install
 npm start
 ```
 
 </details>
-
----
-
-### Terminal-Only Mode (No GUI)
-
-To run the raw C shell directly in any Linux, WSL, or macOS terminal:
-
-```bash
-./retroshell
-```
-
----
-
-## Built-in Command Reference
-
-| Command | Syntax | Description |
-| :--- | :--- | :--- |
-| `help` | `help` | List all available shell commands |
-| `welcome` | `welcome` | Revisit the welcome and onboarding screen |
-| `user` | `user [name]` | View or update your `@retros` identity |
-| `theme` | `theme <name>` | Switch accent theme: `retro` · `cyber` · `matrix` · `dracula` |
-| `monitor` | `monitor [sec]` | Real-time CPU, RAM and process dashboard |
-| `sched` | `sched fcfs 0:5 1:3` | FCFS CPU scheduler with ASCII Gantt chart |
-| `sched real` | `sched real rr 0.5 "burn 2"` | Live preemptive Round Robin benchmark |
-| `mode-switch` | `mode-switch` | Toggle Ring 3 User to Ring 0 Kernel mode |
-| `clear` | `clear` | Clear the terminal screen |
-| `exit` | `exit` | Exit the retroshell session |
 
 ---
 
@@ -355,7 +299,7 @@ To run the raw C shell directly in any Linux, WSL, or macOS terminal:
 | `Ctrl` + `-` | Zoom Out Font Size |
 | `Ctrl` + `0` | Reset Zoom to Default |
 | `Ctrl` + Mouse Wheel | Smooth Font Zoom In / Out |
-| Titlebar `[A-]` / `[A+]` | Quick click-to-zoom controls |
+| Titlebar `[A-]` / `[A+]` | Clickable zoom controls |
 
 ---
 
@@ -363,10 +307,10 @@ To run the raw C shell directly in any Linux, WSL, or macOS terminal:
 
 ```
 RetroOS_Shell/
-├── retroshell.c       # Core C shell: lexer, parser, fork/exec, scheduler, fastfetch
+├── retroshell.c       # Core hybrid C shell engine (CMD aliases, scheduler, parser)
 ├── Makefile           # Compilation rules for C shell
-├── main.js            # Electron main process: window manager, PTY bridge, hotkeys
-├── index.html         # Frontend GUI: xterm.js terminal, titlebar, theme styling
+├── main.js            # Electron main process (PTY bridge, global hotkey, window manager)
+├── index.html         # Frontend GUI (xterm.js terminal canvas, custom titlebar)
 ├── icon.png           # Cyberpunk purple terminal icon (PNG)
 ├── icon.ico           # Windows multi-size application icon (ICO)
 ├── launch.bat         # Windows safe launcher script
@@ -381,11 +325,10 @@ RetroOS_Shell/
 
 | Issue | Resolution |
 | :--- | :--- |
-| `retroshell: No such file or directory` | Build the binary first: `gcc -std=c11 -Wall -o retroshell retroshell.c` |
-| Window closes instantly on launch | Verify WSL is operational and the binary exists in `~/retroshell/retroshell` |
+| `retroshell: cannot switch to drive` | Ensure the drive is available in Windows (e.g. check if `E:\` is mounted) |
+| Window closes instantly on launch | Run `wsl -e bash -c "ls -l ~/retroshell/retroshell"` to verify the binary is compiled |
 | Powerline symbols show as boxes | Install a Nerd Font or launch using `./retroshell --ascii` |
 | `Cannot find module 'electron'` | Run `npm install` inside the project root folder |
-| Permission errors on Windows drives | Run terminal as your regular Windows user account |
 
 ---
 

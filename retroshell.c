@@ -187,6 +187,32 @@ static void print_sep(RGB from, int has_next, RGB next)
     printf("%s", glyph);
 }
 
+static void format_display_path(const char *raw_cwd, char *out, size_t out_sz)
+{
+    /* If path is under /mnt/<drive>/..., format it as Windows style C:\... */
+    if (strncmp(raw_cwd, "/mnt/", 5) == 0 && isalpha((unsigned char)raw_cwd[5]) && (raw_cwd[6] == '/' || raw_cwd[6] == '\0')) {
+        char drive = toupper((unsigned char)raw_cwd[5]);
+        const char *rest = raw_cwd[6] == '/' ? raw_cwd + 7 : "";
+        if (*rest == '\0') {
+            snprintf(out, out_sz, "%c:\\", drive);
+            return;
+        }
+        snprintf(out, out_sz, "%c:\\%s", drive, rest);
+        /* Convert forward slashes to Windows backslashes */
+        for (char *p = out + 3; *p; p++) {
+            if (*p == '/') *p = '\\';
+        }
+        return;
+    }
+
+    const char *home = getenv("HOME");
+    if (home && *home && strncmp(raw_cwd, home, strlen(home)) == 0 &&
+        (raw_cwd[strlen(home)] == '/' || raw_cwd[strlen(home)] == '\0'))
+        snprintf(out, out_sz, "~%s", raw_cwd + strlen(home));
+    else
+        snprintf(out, out_sz, "%s", raw_cwd);
+}
+
 static void print_prompt(void)
 {
     const Theme *t = &THEMES[theme_idx];
@@ -194,13 +220,8 @@ static void print_prompt(void)
 
     char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof cwd)) strcpy(cwd, "?");
-    const char *home = getenv("HOME");
     char shown[PATH_MAX + 2];
-    if (home && *home && strncmp(cwd, home, strlen(home)) == 0 &&
-        (cwd[strlen(home)] == '/' || cwd[strlen(home)] == '\0'))
-        snprintf(shown, sizeof shown, "~%s", cwd + strlen(home));
-    else
-        snprintf(shown, sizeof shown, "%s", cwd);
+    format_display_path(cwd, shown, sizeof shown);
 
     const char *uname = g_username[0] ? g_username : "retro";
     char user_tag[128];
@@ -859,7 +880,30 @@ static int bi_cd(int argc, char **argv)
     }
     if (!target) { fprintf(stderr, "cd: HOME not set\n"); return 1; }
 
-    if (chdir(target) != 0) { fprintf(stderr, "cd: %s: %s\n", target, strerror(errno)); return 1; }
+    /* Normalize Windows paths: e.g. C:\Users\... or path\subpath or cd \ */
+    char resolved[PATH_MAX];
+    strncpy(resolved, target, sizeof(resolved) - 1);
+    resolved[sizeof(resolved) - 1] = '\0';
+
+    /* Convert backslashes to forward slashes */
+    for (char *p = resolved; *p; p++) {
+        if (*p == '\\') *p = '/';
+    }
+
+    /* If user types 'C:/Users/...' or 'c:/...' map to '/mnt/c/...' */
+    if (isalpha((unsigned char)resolved[0]) && resolved[1] == ':') {
+        char drive = tolower((unsigned char)resolved[0]);
+        char win_trans[PATH_MAX];
+        if (resolved[2] == '/') {
+            snprintf(win_trans, sizeof(win_trans), "/mnt/%c/%s", drive, resolved + 3);
+        } else {
+            snprintf(win_trans, sizeof(win_trans), "/mnt/%c", drive);
+        }
+        strncpy(resolved, win_trans, sizeof(resolved) - 1);
+        resolved[sizeof(resolved) - 1] = '\0';
+    }
+
+    if (chdir(resolved) != 0) { fprintf(stderr, "cd: %s: %s\n", target, strerror(errno)); return 1; }
     if (old[0]) setenv("OLDPWD", old, 1);
     return 0;
 }
@@ -1163,7 +1207,12 @@ static int bi_help(void)
         {"mode-switch",           "toggle simulated privilege level (Ring 3 <-> Ring 0)"},
         {"theme <name>",          "retro, cyber, matrix, dracula"},
         {"fastfetch",             "display the Cyber Purple Cat & system specs"},
-        {"clear",                 "clear the screen and history"},
+        {"clear | cls",           "clear the screen and history"},
+        {"dir [path]",            "list directory files (Windows CMD alias)"},
+        {"C: | E: | D:",          "switch directly to Windows drive"},
+        {"type <file>",           "display contents of a file (alias to cat)"},
+        {"md | rd | del",         "mkdir, rmdir, and delete files (CMD aliases)"},
+        {"copy | move | ren",     "copy, move, and rename files (CMD aliases)"},
         {"exit [code]",           "leave the shell"},
     };
     printf("\n"); set_fg(CYAN); printf(BOLD "RetroOS built-in commands:\n" RESET);
@@ -2013,7 +2062,7 @@ static int is_drive_letter(const char *name)
 }
 
 static const char *BUILTIN_NAMES[] = {
-    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "cls", "dir", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
+    "cd", "pwd", "help", "theme", "mode-switch", "sched", "monitor", "clear", "cls", "dir", "type", "md", "rd", "del", "copy", "move", "ren", "export", "unset", "jobs", "history", "user", "welcome", "fastfetch", "fetch", "exit", "quit", NULL
 };
 
 static int is_builtin(const char *name)
@@ -2051,7 +2100,15 @@ static int run_builtin(int argc, char **argv, int *status)
     else if (strcmp(c, "clear") == 0 || strcmp(c, "cls") == 0) { printf("\x1b[H\x1b[2J\x1b[3J"); fflush(stdout); *status = 0; }
     else if (strcmp(c, "dir") == 0) {
         /* Run ls with informative formatting when user types 'dir' */
-        char *ls_args[] = {"ls", "-lah", "--color=auto", NULL};
+        char *ls_args[MAX_ARGS];
+        ls_args[0] = "ls";
+        ls_args[1] = "-lah";
+        ls_args[2] = "--color=auto";
+        int idx = 3;
+        for (int k = 1; k < argc && idx < MAX_ARGS - 1; k++) {
+            ls_args[idx++] = argv[k];
+        }
+        ls_args[idx] = NULL;
         pid_t pid = fork();
         if (pid == 0) {
             execvp("ls", ls_args);
@@ -2059,6 +2116,73 @@ static int run_builtin(int argc, char **argv, int *status)
         }
         int ws;
         waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
+    else if (strcmp(c, "type") == 0) {
+        /* CMD 'type' behaves like 'cat' */
+        argv[0] = "cat";
+        pid_t pid = fork();
+        if (pid == 0) {
+            execvp("cat", argv);
+            _exit(1);
+        }
+        int ws;
+        waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
+    else if (strcmp(c, "md") == 0) {
+        /* CMD 'md' behaves like 'mkdir -p' */
+        char *mk_args[MAX_ARGS];
+        mk_args[0] = "mkdir";
+        mk_args[1] = "-p";
+        int idx = 2;
+        for (int k = 1; k < argc && idx < MAX_ARGS - 1; k++) mk_args[idx++] = argv[k];
+        mk_args[idx] = NULL;
+        pid_t pid = fork();
+        if (pid == 0) { execvp("mkdir", mk_args); _exit(1); }
+        int ws; waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
+    else if (strcmp(c, "rd") == 0) {
+        /* CMD 'rd' behaves like 'rmdir' */
+        argv[0] = "rmdir";
+        pid_t pid = fork();
+        if (pid == 0) { execvp("rmdir", argv); _exit(1); }
+        int ws; waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
+    else if (strcmp(c, "del") == 0) {
+        /* CMD 'del' behaves like 'rm -f' */
+        char *rm_args[MAX_ARGS];
+        rm_args[0] = "rm";
+        rm_args[1] = "-f";
+        int idx = 2;
+        for (int k = 1; k < argc && idx < MAX_ARGS - 1; k++) rm_args[idx++] = argv[k];
+        rm_args[idx] = NULL;
+        pid_t pid = fork();
+        if (pid == 0) { execvp("rm", rm_args); _exit(1); }
+        int ws; waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
+    else if (strcmp(c, "copy") == 0) {
+        /* CMD 'copy' behaves like 'cp -r' */
+        char *cp_args[MAX_ARGS];
+        cp_args[0] = "cp";
+        cp_args[1] = "-r";
+        int idx = 2;
+        for (int k = 1; k < argc && idx < MAX_ARGS - 1; k++) cp_args[idx++] = argv[k];
+        cp_args[idx] = NULL;
+        pid_t pid = fork();
+        if (pid == 0) { execvp("cp", cp_args); _exit(1); }
+        int ws; waitpid(pid, &ws, 0);
+        *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
+    }
+    else if (strcmp(c, "move") == 0 || strcmp(c, "ren") == 0) {
+        /* CMD 'move' / 'ren' behaves like 'mv' */
+        argv[0] = "mv";
+        pid_t pid = fork();
+        if (pid == 0) { execvp("mv", argv); _exit(1); }
+        int ws; waitpid(pid, &ws, 0);
         *status = WIFEXITED(ws) ? WEXITSTATUS(ws) : 1;
     }
     else if (strcmp(c, "fastfetch") == 0 || strcmp(c, "fetch") == 0) { print_banner(); fflush(stdout); *status = 0; }
