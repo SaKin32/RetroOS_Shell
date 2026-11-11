@@ -49,7 +49,10 @@ if (!gotLock) {
   ipcMain.on('pty-start', (e, size) => {
     const s = sessions.get(e.sender.id);
     if (!s || s.term) return;
-    s.term = pty.spawn('wsl.exe', ['--cd', '~/retroshell', '-e', './retroshell'], {
+
+    // Launch shell directly into the Windows user profile directory
+    const winHome = process.env.USERPROFILE || 'C:\\Users\\mdsho';
+    s.term = pty.spawn('wsl.exe', ['--cd', winHome, '-e', '/home/comando_32/retroshell/retroshell'], {
       name: 'xterm-256color',
       cols: size.cols,
       rows: size.rows,
