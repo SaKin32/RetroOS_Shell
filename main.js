@@ -1,8 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const electron = require('electron');
+const { app, BrowserWindow, ipcMain } = electron;
 const pty = require('@lydell/node-pty');
-
-// Cache errors ("Unable to move the cache") ar ashbe na
-app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 // Ekta-i app process thakbe. Dwitiyo-bar `npm start` dile notun process
 // khulbe na, ager app-e ekta notun window khulbe.
@@ -36,7 +34,7 @@ if (!gotLock) {
     sessions.set(id, { win, term: null });
     win.on('closed', () => {
       const s = sessions.get(id);
-      if (s && s.term) { try { s.term.kill(); } catch (e) {} }
+      if (s && s.term) { try { s.term.kill(); } catch (e) { } }
       sessions.delete(id);
     });
 
@@ -58,15 +56,22 @@ if (!gotLock) {
       env: process.env
     });
     s.term.onData((d) => { if (!s.win.isDestroyed()) s.win.webContents.send('pty-data', d); });
-    s.term.onExit(() => { if (!s.win.isDestroyed()) s.win.close(); });   // shell bondho -> ei window bondho
+    s.term.onExit(() => {
+      s.term = null;                              // PTY exit hoyegele null kore dao
+      if (!s.win.isDestroyed()) s.win.close();   // shell bondho -> window bondho
+    });
   });
-  ipcMain.on('pty-input',  (e, d) => { const s = sessions.get(e.sender.id); if (s && s.term) s.term.write(d); });
-  ipcMain.on('pty-resize', (e, z) => { const s = sessions.get(e.sender.id); if (s && s.term) s.term.resize(z.cols, z.rows); });
+  ipcMain.on('pty-input', (e, d) => { const s = sessions.get(e.sender.id); if (s && s.term) s.term.write(d); });
+  ipcMain.on('pty-resize', (e, z) => {
+    const s = sessions.get(e.sender.id);
+    // PTY already exit hoye gele resize korba na - nahole crash
+    if (s && s.term) { try { s.term.resize(z.cols, z.rows); } catch (_) { } }
+  });
 
   // ---- Window buttons ----
   const winOf = (e) => BrowserWindow.fromWebContents(e.sender);
-  ipcMain.on('win-min',   (e) => winOf(e).minimize());
-  ipcMain.on('win-max',   (e) => { const w = winOf(e); w.isMaximized() ? w.unmaximize() : w.maximize(); });
+  ipcMain.on('win-min', (e) => winOf(e).minimize());
+  ipcMain.on('win-max', (e) => { const w = winOf(e); w.isMaximized() ? w.unmaximize() : w.maximize(); });
   ipcMain.on('win-close', (e) => winOf(e).close());
   ipcMain.on('new-window', () => createWindow());
 }
