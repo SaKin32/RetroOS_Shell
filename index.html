@@ -221,6 +221,15 @@
     }
   }, { passive: false });
 
+  // Block the browser's native paste event completely!
+  // In Chromium/Electron, when Ctrl+V is pressed, the browser triggers a native 'paste' event
+  // on document/window, which xterm.js also listens to internally. By calling preventDefault()
+  // and stopImmediatePropagation() on window in capture phase, xterm NEVER sees the browser paste event.
+  window.addEventListener('paste', (ev) => {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+  }, true);
+
   // Helper for guaranteed clipboard read
   function getClipboardText() {
     if (electronClipboard && typeof electronClipboard.readText === 'function') {
