@@ -125,7 +125,7 @@
 <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
 <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
 <script>
-  const { send: ipcSend, on: ipcOn } = window.electronAPI;
+  const { send: ipcSend, on: ipcOn, clipboard: electronClipboard } = window.electronAPI;
   const FitAddonClass = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon;
 
   // Load saved font size or default to 15
@@ -221,10 +221,52 @@
     }
   }, { passive: false });
 
+  // Helper for guaranteed clipboard read
+  function getClipboardText() {
+    if (electronClipboard && typeof electronClipboard.readText === 'function') {
+      try {
+        const text = electronClipboard.readText();
+        if (text) return Promise.resolve(text);
+      } catch (_) {}
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+      return navigator.clipboard.readText().catch(() => '');
+    }
+    return Promise.resolve('');
+  }
+
+  // Helper for guaranteed clipboard write
+  function setClipboardText(text) {
+    if (!text) return;
+    if (electronClipboard && typeof electronClipboard.writeText === 'function') {
+      try {
+        electronClipboard.writeText(text);
+        return;
+      } catch (_) {}
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  }
+
+  // Safe single-paste execution
+  let isPasting = false;
+  function performPaste() {
+    if (isPasting) return;
+    isPasting = true;
+    getClipboardText().then((text) => {
+      if (text) {
+        ipcSend('pty-input', text);
+      }
+    }).finally(() => {
+      setTimeout(() => { isPasting = false; }, 80);
+    });
+  }
+
   // Keyboard Shortcuts:
   // - Ctrl + C (with selection) = Copy selected text to clipboard
   // - Ctrl + C (no selection)   = Send SIGINT to running process (normal ^C)
-  // - Ctrl + V / Ctrl + Shift + V = Handled natively by xterm
+  // - Ctrl + V / Ctrl + Shift + V = Single Paste from clipboard
   // - Ctrl + Shift + C          = Copy (alternative)
   // - Ctrl + Shift + N          = New Window
   // - Ctrl + = / +              = Font Zoom In
@@ -241,7 +283,7 @@
       if (ev.ctrlKey && !ev.shiftKey && ev.code === 'KeyC') {
         const sel = term.getSelection();
         if (sel) {
-          navigator.clipboard.writeText(sel).catch(() => {});
+          setClipboardText(sel);
           return false;
         }
         return true; // No selection → SIGINT
@@ -250,14 +292,14 @@
       // Copy: Ctrl+Shift+C
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyC') {
         const sel = term.getSelection();
-        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        if (sel) setClipboardText(sel);
         return false;
       }
 
-      // Paste: Let xterm/browser handle Ctrl+V or Ctrl+Shift+V naturally.
-      // Returning true lets it pass to xterm's internal onData, avoiding double paste.
+      // Paste: Ctrl+V or Ctrl+Shift+V
       if (ev.ctrlKey && ev.code === 'KeyV') {
-        return true;
+        performPaste();
+        return false; // Crucial: prevent xterm from doing an unhandled or duplicate second paste
       }
 
       // Font zoom
@@ -274,14 +316,14 @@
     return true;
   });
 
-  // Right-click: copy selection if text selected, otherwise paste via term.paste()
+  // Right-click: copy selection if text selected, otherwise paste
   document.getElementById('terminal').addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     const sel = term.getSelection();
     if (sel) {
-      navigator.clipboard.writeText(sel).catch(() => {});
+      setClipboardText(sel);
     } else {
-      navigator.clipboard.readText().then((t) => { if (t) term.paste(t); }).catch(() => {});
+      performPaste();
     }
   });
 
