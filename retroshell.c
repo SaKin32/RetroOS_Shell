@@ -959,22 +959,21 @@ static void expand_var(const char **p_ptr, char **out_ptr, char *buf, size_t buf
     if (*p == '(' && p[1] == '(') {
         p += 2;
         const char *start = p;
-        int paren_depth = 2; /* Already entered two open parens $(( */
+        int depth = 0;
         while (*p) {
             if (*p == '(') {
-                paren_depth++;
+                depth++;
                 p++;
             } else if (*p == ')') {
-                paren_depth--;
-                if (paren_depth == 0) {
-                    /* Should not happen before the outer pair unless mismatched */
+                if (depth > 0) {
+                    depth--;
+                    p++;
+                } else if (p[1] == ')') {
+                    /* Both outer closing parens matched */
                     break;
+                } else {
+                    p++;
                 }
-                if (paren_depth == 1 && p[1] == ')') {
-                    /* Matched the closing )) of $(( */
-                    break;
-                }
-                p++;
             } else {
                 p++;
             }
@@ -1312,22 +1311,18 @@ static int split_line_segments(const char *line, LineSegment *segs, int max_segs
         /* Skip $(( ... )) so operators like | and & inside arithmetic expressions are not treated as chain/job operators */
         if (*p == '$' && p[1] == '(' && p[2] == '(') {
             p += 3;
-            int paren_depth = 2;
+            int depth = 1;
             while (*p) {
-                if (*p == '(') {
-                    paren_depth++;
-                    p++;
-                } else if (*p == ')') {
-                    paren_depth--;
-                    if (paren_depth == 1 && p[1] == ')') {
+                if (*p == '(' && p[1] == '(') {
+                    depth++;
+                    p += 2;
+                } else if (*p == ')' && p[1] == ')') {
+                    depth--;
+                    if (depth == 0) {
                         p += 2;
                         break;
                     }
-                    if (paren_depth <= 0) {
-                        p++;
-                        break;
-                    }
-                    p++;
+                    p += 2;
                 } else {
                     p++;
                 }
