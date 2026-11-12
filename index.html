@@ -122,8 +122,11 @@
   </div>
   <div id="terminal"></div>
 
+<script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
 <script>
-  const { Terminal, FitAddon, send: ipcSend, on: ipcOn } = window.electronAPI;
+  const { send: ipcSend, on: ipcOn } = window.electronAPI;
+  const FitAddonClass = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon;
 
   // Load saved font size or default to 15
   let currentFontSize = parseInt(localStorage.getItem('retro_font_size'), 10) || 15;
@@ -151,7 +154,7 @@
     }
   });
 
-  const fit = new FitAddon();
+  const fit = new FitAddonClass();
   term.loadAddon(fit);
 
   Promise.all([
