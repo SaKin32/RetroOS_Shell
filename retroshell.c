@@ -959,16 +959,25 @@ static void expand_var(const char **p_ptr, char **out_ptr, char *buf, size_t buf
     if (*p == '(' && p[1] == '(') {
         p += 2;
         const char *start = p;
-        int depth = 1;
+        int paren_depth = 2; /* Already entered two open parens $(( */
         while (*p) {
-            if (*p == '(' && p[1] == '(') { depth++; p += 2; continue; }
-            if (*p == ')' && p[1] == ')') {
-                depth--;
-                if (depth == 0) break;
-                p += 2;
-                continue;
+            if (*p == '(') {
+                paren_depth++;
+                p++;
+            } else if (*p == ')') {
+                paren_depth--;
+                if (paren_depth == 0) {
+                    /* Should not happen before the outer pair unless mismatched */
+                    break;
+                }
+                if (paren_depth == 1 && p[1] == ')') {
+                    /* Matched the closing )) of $(( */
+                    break;
+                }
+                p++;
+            } else {
+                p++;
             }
-            p++;
         }
         size_t elen = (size_t)(p - start);
         char expr[256];
@@ -1303,16 +1312,25 @@ static int split_line_segments(const char *line, LineSegment *segs, int max_segs
         /* Skip $(( ... )) so operators like | and & inside arithmetic expressions are not treated as chain/job operators */
         if (*p == '$' && p[1] == '(' && p[2] == '(') {
             p += 3;
-            int depth = 1;
+            int paren_depth = 2;
             while (*p) {
-                if (*p == '(' && p[1] == '(') { depth++; p += 2; continue; }
-                if (*p == ')' && p[1] == ')') {
-                    depth--;
-                    if (depth == 0) { p += 2; break; }
-                    p += 2;
-                    continue;
+                if (*p == '(') {
+                    paren_depth++;
+                    p++;
+                } else if (*p == ')') {
+                    paren_depth--;
+                    if (paren_depth == 1 && p[1] == ')') {
+                        p += 2;
+                        break;
+                    }
+                    if (paren_depth <= 0) {
+                        p++;
+                        break;
+                    }
+                    p++;
+                } else {
+                    p++;
                 }
-                p++;
             }
             continue;
         }
