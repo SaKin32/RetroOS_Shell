@@ -2757,16 +2757,41 @@ static int run_builtin(int argc, char **argv, int *status)
     else if (strcmp(c, "monitor") == 0)     *status = bi_monitor(argc, argv);
     else if (strcmp(c, "clear") == 0 || strcmp(c, "cls") == 0) { printf("\x1b[H\x1b[2J\x1b[3J"); fflush(stdout); *status = 0; }
     else if (strcmp(c, "dir") == 0) {
-        /* Run ls with informative formatting when user types 'dir' */
+        /* Run ls with Windows CMD compatibility: map flags like /a, /w, /s, /p, /b, /q */
         char *ls_args[MAX_ARGS];
         ls_args[0] = "ls";
-        ls_args[1] = "-lah";
-        ls_args[2] = "--color=auto";
-        int idx = 3;
-        for (int k = 1; k < argc && idx < MAX_ARGS - 1; k++) {
-            ls_args[idx++] = argv[k];
+        ls_args[1] = "--color=auto";
+        int idx = 2;
+
+        int show_all = 0;
+        int long_format = 1;
+        int recursive = 0;
+        int wide_format = 0;
+
+        for (int k = 1; k < argc && idx < MAX_ARGS - 5; k++) {
+            char *arg = argv[k];
+            if (arg[0] == '/') {
+                /* Windows CMD flag style: /a, /w, /s, /b, /p */
+                for (int j = 1; arg[j]; j++) {
+                    char flag = tolower((unsigned char)arg[j]);
+                    if (flag == 'a') show_all = 1;
+                    else if (flag == 'w') { wide_format = 1; long_format = 0; }
+                    else if (flag == 's') recursive = 1;
+                    else if (flag == 'b') { long_format = 0; }
+                    else if (flag == 'l') long_format = 1;
+                }
+            } else {
+                /* Target path or filename argument */
+                ls_args[idx++] = arg;
+            }
         }
+
+        if (show_all) ls_args[idx++] = "-a";
+        if (long_format) ls_args[idx++] = "-lh";
+        if (wide_format) ls_args[idx++] = "-C";
+        if (recursive) ls_args[idx++] = "-R";
         ls_args[idx] = NULL;
+
         pid_t pid = fork();
         if (pid == 0) {
             execvp("ls", ls_args);
