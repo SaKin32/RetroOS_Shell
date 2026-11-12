@@ -6,7 +6,7 @@
 ![Electron](https://img.shields.io/badge/GUI-Electron%20v33%20%2B%20xterm.js-47848F?style=for-the-badge&logo=electron)
 ![Platform](https://img.shields.io/badge/Primary%20Platform-Windows%2011%20(WSL2)-0078D6?style=for-the-badge&logo=windows)
 ![CLI](https://img.shields.io/badge/CLI%20Platform-Linux%20%7C%20macOS-339933?style=for-the-badge&logo=linux)
-![License](https://img.shields.io/badge/License-MIT-ec4899?style=for-the-badge)
+![License](https://img.shields.io/badge/Academic%20Project-Personal%20Use-ec4899?style=for-the-badge)
 ![Version](https://img.shields.io/badge/Version-1.3.0-c084fc?style=for-the-badge)
 
 **A Cyberpunk Desktop Terminal and Educational Unix/Windows Hybrid Shell**
@@ -30,7 +30,7 @@
 8. [Installation Guide](#8-installation-guide)
 9. [Project Structure](#9-project-structure)
 10. [Academic Context](#10-academic-context)
-11. [License](#11-license)
+11. [Project Status & Terms](#11-project-status--terms)
 
 ---
 
@@ -396,9 +396,9 @@ RetroOS Terminal was developed as an operating systems course project. The follo
 
 ---
 
-## 11. License
+## 11. Project Status & Terms
 
-This project is licensed under the **[MIT License](LICENSE)**.
+This project is an **academic coursework project** built for educational purposes and personal demonstration. All rights reserved by the author. You are welcome to review, test, and learn from the codebase for educational and non-commercial purposes.
 
 ---
 
