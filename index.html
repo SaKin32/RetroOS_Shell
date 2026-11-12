@@ -221,15 +221,26 @@
     }
   }, { passive: false });
 
+  // Block native browser 'paste' event on the terminal element.
+  // Without this, Ctrl+V fires BOTH: (1) xterm's native paste and (2) our clipboard handler below,
+  // causing the text to appear twice. We intercept here and handle paste ourselves.
+  document.getElementById('terminal').addEventListener('paste', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const text = ev.clipboardData ? ev.clipboardData.getData('text/plain') : '';
+    if (text) ipcSend('pty-input', text);
+  }, { capture: true });
+
   // Keyboard Shortcuts:
-  // - Ctrl + C (with selection) = Copy selected text
-  // - Ctrl + V = Paste from clipboard
-  // - Ctrl + Shift + C = Copy (alternative)
-  // - Ctrl + Shift + V = Paste (alternative)
-  // - Ctrl + Shift + N = New Window
-  // - Ctrl + = or Ctrl + + (or NumpadAdd) = Font Zoom In
-  // - Ctrl + - (or NumpadSubtract) = Font Zoom Out
-  // - Ctrl + 0 = Reset Font
+  // - Ctrl + C (with selection) = Copy selected text to clipboard
+  // - Ctrl + C (no selection)   = Send SIGINT to running process (normal ^C)
+  // - Ctrl + V                  = Paste from clipboard (single paste only)
+  // - Ctrl + Shift + C          = Copy (alternative)
+  // - Ctrl + Shift + V          = Paste (alternative)
+  // - Ctrl + Shift + N          = New Window
+  // - Ctrl + = / +              = Font Zoom In
+  // - Ctrl + -                  = Font Zoom Out
+  // - Ctrl + 0                  = Reset Font Size
   term.attachCustomKeyEventHandler((ev) => {
     if (ev.type === 'keydown') {
       // New Window
@@ -237,24 +248,24 @@
         ipcSend('new-window'); return false;
       }
 
-      // Copy: Ctrl+C (only when text is selected, otherwise send as SIGINT)
+      // Copy: Ctrl+C — only copy if text is selected; otherwise let ^C (SIGINT) pass through
       if (ev.ctrlKey && !ev.shiftKey && ev.code === 'KeyC') {
         const sel = term.getSelection();
         if (sel) {
           navigator.clipboard.writeText(sel).catch(() => {});
-          return false; // Prevent sending ^C to shell
+          return false;
         }
-        return true; // No selection → send SIGINT to shell as normal
+        return true; // No selection → SIGINT
       }
 
-      // Copy: Ctrl+Shift+C (always copy, even if nothing selected)
+      // Copy: Ctrl+Shift+C
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyC') {
         const sel = term.getSelection();
         if (sel) navigator.clipboard.writeText(sel).catch(() => {});
         return false;
       }
 
-      // Paste: Ctrl+V
+      // Paste: Ctrl+V — read clipboard once, send to PTY; native paste event already blocked above
       if (ev.ctrlKey && !ev.shiftKey && ev.code === 'KeyV') {
         navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
         return false;
@@ -266,7 +277,7 @@
         return false;
       }
 
-      // Font zoom keys
+      // Font zoom
       if (ev.ctrlKey && (ev.key === '=' || ev.key === '+' || ev.code === 'NumpadAdd')) {
         changeFontSize(1); return false;
       }
@@ -280,15 +291,13 @@
     return true;
   });
 
-  // Right-click → paste from clipboard
+  // Right-click: copy selection if text selected, otherwise paste from clipboard
   document.getElementById('terminal').addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     const sel = term.getSelection();
     if (sel) {
-      // If text is selected: right-click copies it
       navigator.clipboard.writeText(sel).catch(() => {});
     } else {
-      // If nothing selected: right-click pastes from clipboard
       navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
     }
   });
