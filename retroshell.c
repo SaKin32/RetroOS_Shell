@@ -664,64 +664,46 @@ static int is_opchar(char c) { return c == '|' || c == '<' || c == '>' || c == '
 
 /* ------------------------------------------------------------------
  * Arithmetic Expression Evaluator for $((expr))
- * Supports +, -, *, /, %, parentheses and variable lookup
+ * Supports +, -, *, /, %, parentheses, bitwise (&, |, ^), shifts (<<, >>),
+ * comparison, overflow checks, and variable lookup.
  * ------------------------------------------------------------------ */
-static long long eval_expr_primary(const char **s);
+typedef struct {
+    int has_error;
+    char error_msg[128];
+} ArithContext;
 
-static long long eval_expr_factor(const char **s)
+static long long eval_expr_bitwise_or(const char **s, ArithContext *ctx);
+
+static void arith_error(ArithContext *ctx, const char *msg)
+{
+    if (!ctx->has_error) {
+        ctx->has_error = 1;
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg), "%s", msg);
+    }
+}
+
+static long long eval_expr_primary(const char **s, ArithContext *ctx)
 {
     while (isspace((unsigned char)**s)) (*s)++;
-    if (**s == '+') { (*s)++; return eval_expr_factor(s); }
-    if (**s == '-') { (*s)++; return -eval_expr_factor(s); }
-    return eval_expr_primary(s);
-}
-
-static long long eval_expr_term(const char **s)
-{
-    long long val = eval_expr_factor(s);
-    for (;;) {
-        while (isspace((unsigned char)**s)) (*s)++;
-        char op = **s;
-        if (op == '*' || op == '/' || op == '%') {
-            (*s)++;
-            long long right = eval_expr_factor(s);
-            if (op == '*') val *= right;
-            else if (op == '/') val = (right != 0) ? (val / right) : 0;
-            else if (op == '%') val = (right != 0) ? (val % right) : 0;
-        } else break;
+    if (**s == '\0') {
+        arith_error(ctx, "syntax error: operand expected");
+        return 0;
     }
-    return val;
-}
-
-static long long eval_expr_add(const char **s)
-{
-    long long val = eval_expr_term(s);
-    for (;;) {
-        while (isspace((unsigned char)**s)) (*s)++;
-        char op = **s;
-        if (op == '+' || op == '-') {
-            (*s)++;
-            long long right = eval_expr_term(s);
-            if (op == '+') val += right;
-            else val -= right;
-        } else break;
-    }
-    return val;
-}
-
-static long long eval_expr_primary(const char **s)
-{
-    while (isspace((unsigned char)**s)) (*s)++;
     if (**s == '(') {
         (*s)++;
-        long long val = eval_expr_add(s);
+        long long val = eval_expr_bitwise_or(s, ctx);
         while (isspace((unsigned char)**s)) (*s)++;
-        if (**s == ')') (*s)++;
+        if (**s == ')') {
+            (*s)++;
+        } else {
+            arith_error(ctx, "syntax error: missing ')'");
+        }
         return val;
     }
     if (isdigit((unsigned char)**s)) {
         char *endptr;
-        long long val = strtoll(*s, &endptr, 10);
+        errno = 0;
+        long long val = strtoll(*s, &endptr, 0);
         *s = endptr;
         return val;
     }
@@ -734,15 +716,235 @@ static long long eval_expr_primary(const char **s)
         memcpy(var_name, start, len);
         var_name[len] = '\0';
         const char *v = getenv(var_name);
-        return v ? atoll(v) : 0;
+        if (v && *v) {
+            char *endptr;
+            return strtoll(v, &endptr, 0);
+        }
+        return 0;
     }
+    arith_error(ctx, "syntax error: unexpected token");
     return 0;
 }
 
-static long long eval_arithmetic_str(const char *expr)
+static long long eval_expr_unary(const char **s, ArithContext *ctx)
 {
+    while (isspace((unsigned char)**s)) (*s)++;
+    if (**s == '+') { (*s)++; return eval_expr_unary(s, ctx); }
+    if (**s == '-') {
+        (*s)++;
+        long long v = eval_expr_unary(s, ctx);
+        if (v == LLONG_MIN) return LLONG_MIN; /* wrap on overflow */
+        return -v;
+    }
+    if (**s == '~') {
+        (*s)++;
+        return ~eval_expr_unary(s, ctx);
+    }
+    if (**s == '!') {
+        (*s)++;
+        return !eval_expr_unary(s, ctx);
+    }
+    return eval_expr_primary(s, ctx);
+}
+
+static long long eval_expr_mul(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_unary(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        char op = **s;
+        if (op == '*' || op == '/' || op == '%') {
+            (*s)++;
+            long long right = eval_expr_unary(s, ctx);
+            if (ctx->has_error) return 0;
+            if (op == '*') {
+                long long res;
+                if (__builtin_mul_overflow(val, right, &res)) {
+                    /* On signed overflow, perform modular wrap-around */
+                    val = (long long)((unsigned long long)val * (unsigned long long)right);
+                } else {
+                    val = res;
+                }
+            } else if (op == '/') {
+                if (right == 0) {
+                    arith_error(ctx, "division by 0");
+                    return 0;
+                }
+                if (val == LLONG_MIN && right == -1) {
+                    val = LLONG_MIN; /* Prevent SIGFPE on x86 LLONG_MIN / -1 */
+                } else {
+                    val = val / right;
+                }
+            } else if (op == '%') {
+                if (right == 0) {
+                    arith_error(ctx, "division by 0");
+                    return 0;
+                }
+                if (val == LLONG_MIN && right == -1) {
+                    val = 0; /* LLONG_MIN % -1 is mathematically 0 */
+                } else {
+                    val = val % right;
+                }
+            }
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_add(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_mul(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        char op = **s;
+        if (op == '+' || op == '-') {
+            (*s)++;
+            long long right = eval_expr_mul(s, ctx);
+            if (ctx->has_error) return 0;
+            if (op == '+') {
+                long long res;
+                if (__builtin_add_overflow(val, right, &res)) {
+                    val = (long long)((unsigned long long)val + (unsigned long long)right);
+                } else {
+                    val = res;
+                }
+            } else {
+                long long res;
+                if (__builtin_sub_overflow(val, right, &res)) {
+                    val = (long long)((unsigned long long)val - (unsigned long long)right);
+                } else {
+                    val = res;
+                }
+            }
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_shift(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_add(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        if ((*s)[0] == '<' && (*s)[1] == '<') {
+            *s += 2;
+            long long right = eval_expr_add(s, ctx);
+            if (right < 0 || right >= 64) val = 0;
+            else val = (long long)((unsigned long long)val << right);
+        } else if ((*s)[0] == '>' && (*s)[1] == '>') {
+            *s += 2;
+            long long right = eval_expr_add(s, ctx);
+            if (right < 0) val = 0;
+            else if (right >= 64) val = (val < 0) ? -1 : 0;
+            else val = val >> right;
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_cmp(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_shift(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        if ((*s)[0] == '<' && (*s)[1] == '=') {
+            *s += 2;
+            long long right = eval_expr_shift(s, ctx);
+            val = (val <= right);
+        } else if ((*s)[0] == '>' && (*s)[1] == '=') {
+            *s += 2;
+            long long right = eval_expr_shift(s, ctx);
+            val = (val >= right);
+        } else if ((*s)[0] == '<' && (*s)[1] != '<') {
+            (*s)++;
+            long long right = eval_expr_shift(s, ctx);
+            val = (val < right);
+        } else if ((*s)[0] == '>' && (*s)[1] != '>') {
+            (*s)++;
+            long long right = eval_expr_shift(s, ctx);
+            val = (val > right);
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_eq(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_cmp(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        if ((*s)[0] == '=' && (*s)[1] == '=') {
+            *s += 2;
+            long long right = eval_expr_cmp(s, ctx);
+            val = (val == right);
+        } else if ((*s)[0] == '!' && (*s)[1] == '=') {
+            *s += 2;
+            long long right = eval_expr_cmp(s, ctx);
+            val = (val != right);
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_bitwise_and(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_eq(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        if (**s == '&' && (*s)[1] != '&') {
+            (*s)++;
+            long long right = eval_expr_eq(s, ctx);
+            val &= right;
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_bitwise_xor(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_bitwise_and(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        if (**s == '^') {
+            (*s)++;
+            long long right = eval_expr_bitwise_and(s, ctx);
+            val ^= right;
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_bitwise_or(const char **s, ArithContext *ctx)
+{
+    long long val = eval_expr_bitwise_xor(s, ctx);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        if (**s == '|' && (*s)[1] != '|') {
+            (*s)++;
+            long long right = eval_expr_bitwise_xor(s, ctx);
+            val |= right;
+        } else break;
+    }
+    return val;
+}
+
+static int eval_arithmetic_str(const char *expr, long long *result, char *err_buf, size_t err_sz)
+{
+    ArithContext ctx = {0, ""};
     const char *p = expr;
-    return eval_expr_add(&p);
+    long long res = eval_expr_bitwise_or(&p, &ctx);
+    while (isspace((unsigned char)*p)) p++;
+    if (!ctx.has_error && *p != '\0') {
+        arith_error(&ctx, "syntax error: unexpected characters at end of expression");
+    }
+    if (ctx.has_error) {
+        if (err_buf && err_sz > 0) {
+            snprintf(err_buf, err_sz, "%s", ctx.error_msg);
+        }
+        return -1;
+    }
+    *result = res;
+    return 0;
 }
 
 /* Expands $VAR, $?, $$, ${VAR}, or $((expr)) at *p_ptr and writes result into *out_ptr */
@@ -775,11 +977,17 @@ static void expand_var(const char **p_ptr, char **out_ptr, char *buf, size_t buf
         expr[elen] = '\0';
         if (*p == ')' && p[1] == ')') p += 2;
 
-        long long res = eval_arithmetic_str(expr);
-        char tmp[64];
-        int l = snprintf(tmp, sizeof tmp, "%lld", res);
-        for (int i = 0; i < l && (size_t)(out - buf) < buf_sz - 1; i++)
-            *out++ = tmp[i];
+        long long res = 0;
+        char err_msg[128] = {0};
+        if (eval_arithmetic_str(expr, &res, err_msg, sizeof(err_msg)) < 0) {
+            fprintf(stderr, "retroshell: %s: %s\n", expr, err_msg);
+            last_status = 1;
+        } else {
+            char tmp[64];
+            int l = snprintf(tmp, sizeof tmp, "%lld", res);
+            for (int i = 0; i < l && (size_t)(out - buf) < buf_sz - 1; i++)
+                *out++ = tmp[i];
+        }
 
         *p_ptr = p;
         *out_ptr = out;
@@ -937,6 +1145,8 @@ static int tokenize(const char *line, char *buf, size_t buf_sz, char **tok, int 
             } else if (*p == '"' || *p == '\'') {
                 quote = *p++;
                 quoted = 1;
+            } else if (*p == '$' && p[1] == '(' && p[2] == '(') {
+                expand_var(&p, &out, buf, buf_sz);
             } else if (isspace((unsigned char)*p) || is_opchar(*p) || ((*p == '1' || *p == '2') && p[1] == '>')) {
                 break;                               /* word ends here */
             } else if (*p == '\\' && p[1] != '\0') {
@@ -1087,6 +1297,23 @@ static int split_line_segments(const char *line, LineSegment *segs, int max_segs
 
         if (*p == '\'' || *p == '"') {
             quote = *p++;
+            continue;
+        }
+
+        /* Skip $(( ... )) so operators like | and & inside arithmetic expressions are not treated as chain/job operators */
+        if (*p == '$' && p[1] == '(' && p[2] == '(') {
+            p += 3;
+            int depth = 1;
+            while (*p) {
+                if (*p == '(' && p[1] == '(') { depth++; p += 2; continue; }
+                if (*p == ')' && p[1] == ')') {
+                    depth--;
+                    if (depth == 0) { p += 2; break; }
+                    p += 2;
+                    continue;
+                }
+                p++;
+            }
             continue;
         }
 
