@@ -582,19 +582,19 @@ static void print_banner(void)
     set_fg(WHITE);    printf("%s\n", mem_str);
 
     /* Line 18 */
-    printf("                                              ");
+    printf("                                           ");
     set_fg(STAT_HW);  printf("  |-- IP      -> ");
     set_fg(WHITE);    printf("%s\n", local_ip);
 
     /* Line 19 */
-    printf("                                              \n");
+    printf("                                           \n");
 
     /* Line 20 */
-    printf("                                              ");
+    printf("                                           ");
     set_fg(STAT_PAL); printf("o PALETTE\n");
 
     /* Line 21 */
-    printf("                                              ");
+    printf("                                           ");
     set_fg((RGB){0xff, 0xff, 0xff}); printf("  (*) ");
     set_fg((RGB){0xa6, 0xe3, 0xa1}); printf("(*) ");
     set_fg((RGB){0x89, 0xdc, 0xeb}); printf("(*) ");
@@ -662,13 +662,129 @@ typedef struct {
  * ------------------------------------------------------------------ */
 static int is_opchar(char c) { return c == '|' || c == '<' || c == '>' || c == ';' || c == '&'; }
 
-/* Expands $VAR, $?, $$, or ${VAR} at *p_ptr and writes result into *out_ptr */
+/* ------------------------------------------------------------------
+ * Arithmetic Expression Evaluator for $((expr))
+ * Supports +, -, *, /, %, parentheses and variable lookup
+ * ------------------------------------------------------------------ */
+static long long eval_expr_primary(const char **s);
+
+static long long eval_expr_factor(const char **s)
+{
+    while (isspace((unsigned char)**s)) (*s)++;
+    if (**s == '+') { (*s)++; return eval_expr_factor(s); }
+    if (**s == '-') { (*s)++; return -eval_expr_factor(s); }
+    return eval_expr_primary(s);
+}
+
+static long long eval_expr_term(const char **s)
+{
+    long long val = eval_expr_factor(s);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        char op = **s;
+        if (op == '*' || op == '/' || op == '%') {
+            (*s)++;
+            long long right = eval_expr_factor(s);
+            if (op == '*') val *= right;
+            else if (op == '/') val = (right != 0) ? (val / right) : 0;
+            else if (op == '%') val = (right != 0) ? (val % right) : 0;
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_add(const char **s)
+{
+    long long val = eval_expr_term(s);
+    for (;;) {
+        while (isspace((unsigned char)**s)) (*s)++;
+        char op = **s;
+        if (op == '+' || op == '-') {
+            (*s)++;
+            long long right = eval_expr_term(s);
+            if (op == '+') val += right;
+            else val -= right;
+        } else break;
+    }
+    return val;
+}
+
+static long long eval_expr_primary(const char **s)
+{
+    while (isspace((unsigned char)**s)) (*s)++;
+    if (**s == '(') {
+        (*s)++;
+        long long val = eval_expr_add(s);
+        while (isspace((unsigned char)**s)) (*s)++;
+        if (**s == ')') (*s)++;
+        return val;
+    }
+    if (isdigit((unsigned char)**s)) {
+        char *endptr;
+        long long val = strtoll(*s, &endptr, 10);
+        *s = endptr;
+        return val;
+    }
+    if (isalpha((unsigned char)**s) || **s == '_') {
+        const char *start = *s;
+        while (isalnum((unsigned char)**s) || **s == '_') (*s)++;
+        char var_name[128];
+        size_t len = (size_t)(*s - start);
+        if (len >= sizeof(var_name)) len = sizeof(var_name) - 1;
+        memcpy(var_name, start, len);
+        var_name[len] = '\0';
+        const char *v = getenv(var_name);
+        return v ? atoll(v) : 0;
+    }
+    return 0;
+}
+
+static long long eval_arithmetic_str(const char *expr)
+{
+    const char *p = expr;
+    return eval_expr_add(&p);
+}
+
+/* Expands $VAR, $?, $$, ${VAR}, or $((expr)) at *p_ptr and writes result into *out_ptr */
 static void expand_var(const char **p_ptr, char **out_ptr, char *buf, size_t buf_sz)
 {
     const char *p = *p_ptr;
     char *out = *out_ptr;
 
     p++; /* skip '$' */
+
+    /* Arithmetic expansion: $((expression)) */
+    if (*p == '(' && p[1] == '(') {
+        p += 2;
+        const char *start = p;
+        int depth = 1;
+        while (*p) {
+            if (*p == '(' && p[1] == '(') { depth++; p += 2; continue; }
+            if (*p == ')' && p[1] == ')') {
+                depth--;
+                if (depth == 0) break;
+                p += 2;
+                continue;
+            }
+            p++;
+        }
+        size_t elen = (size_t)(p - start);
+        char expr[256];
+        if (elen >= sizeof(expr)) elen = sizeof(expr) - 1;
+        memcpy(expr, start, elen);
+        expr[elen] = '\0';
+        if (*p == ')' && p[1] == ')') p += 2;
+
+        long long res = eval_arithmetic_str(expr);
+        char tmp[64];
+        int l = snprintf(tmp, sizeof tmp, "%lld", res);
+        for (int i = 0; i < l && (size_t)(out - buf) < buf_sz - 1; i++)
+            *out++ = tmp[i];
+
+        *p_ptr = p;
+        *out_ptr = out;
+        return;
+    }
 
     if (*p == '?') {
         p++;
