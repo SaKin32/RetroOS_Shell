@@ -222,22 +222,50 @@
   }, { passive: false });
 
   // Keyboard Shortcuts:
+  // - Ctrl + C (with selection) = Copy selected text
+  // - Ctrl + V = Paste from clipboard
+  // - Ctrl + Shift + C = Copy (alternative)
+  // - Ctrl + Shift + V = Paste (alternative)
   // - Ctrl + Shift + N = New Window
-  // - Ctrl + Shift + C / V = Copy / Paste
   // - Ctrl + = or Ctrl + + (or NumpadAdd) = Font Zoom In
   // - Ctrl + - (or NumpadSubtract) = Font Zoom Out
   // - Ctrl + 0 = Reset Font
   term.attachCustomKeyEventHandler((ev) => {
     if (ev.type === 'keydown') {
+      // New Window
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyN') {
         ipcSend('new-window'); return false;
       }
+
+      // Copy: Ctrl+C (only when text is selected, otherwise send as SIGINT)
+      if (ev.ctrlKey && !ev.shiftKey && ev.code === 'KeyC') {
+        const sel = term.getSelection();
+        if (sel) {
+          navigator.clipboard.writeText(sel).catch(() => {});
+          return false; // Prevent sending ^C to shell
+        }
+        return true; // No selection → send SIGINT to shell as normal
+      }
+
+      // Copy: Ctrl+Shift+C (always copy, even if nothing selected)
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyC') {
-        navigator.clipboard.writeText(term.getSelection()); return false;
+        const sel = term.getSelection();
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        return false;
       }
+
+      // Paste: Ctrl+V
+      if (ev.ctrlKey && !ev.shiftKey && ev.code === 'KeyV') {
+        navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
+        return false;
+      }
+
+      // Paste: Ctrl+Shift+V
       if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyV') {
-        navigator.clipboard.readText().then((t) => ipcSend('pty-input', t)); return false;
+        navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
+        return false;
       }
+
       // Font zoom keys
       if (ev.ctrlKey && (ev.key === '=' || ev.key === '+' || ev.code === 'NumpadAdd')) {
         changeFontSize(1); return false;
@@ -250,6 +278,19 @@
       }
     }
     return true;
+  });
+
+  // Right-click → paste from clipboard
+  document.getElementById('terminal').addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    const sel = term.getSelection();
+    if (sel) {
+      // If text is selected: right-click copies it
+      navigator.clipboard.writeText(sel).catch(() => {});
+    } else {
+      // If nothing selected: right-click pastes from clipboard
+      navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
+    }
   });
 
   // Window buttons
