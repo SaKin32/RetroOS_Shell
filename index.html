@@ -221,22 +221,11 @@
     }
   }, { passive: false });
 
-  // Block native browser 'paste' event on the terminal element.
-  // Without this, Ctrl+V fires BOTH: (1) xterm's native paste and (2) our clipboard handler below,
-  // causing the text to appear twice. We intercept here and handle paste ourselves.
-  document.getElementById('terminal').addEventListener('paste', (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    const text = ev.clipboardData ? ev.clipboardData.getData('text/plain') : '';
-    if (text) ipcSend('pty-input', text);
-  }, { capture: true });
-
   // Keyboard Shortcuts:
   // - Ctrl + C (with selection) = Copy selected text to clipboard
   // - Ctrl + C (no selection)   = Send SIGINT to running process (normal ^C)
-  // - Ctrl + V                  = Paste from clipboard (single paste only)
+  // - Ctrl + V / Ctrl + Shift + V = Handled natively by xterm
   // - Ctrl + Shift + C          = Copy (alternative)
-  // - Ctrl + Shift + V          = Paste (alternative)
   // - Ctrl + Shift + N          = New Window
   // - Ctrl + = / +              = Font Zoom In
   // - Ctrl + -                  = Font Zoom Out
@@ -265,16 +254,10 @@
         return false;
       }
 
-      // Paste: Ctrl+V — read clipboard once, send to PTY; native paste event already blocked above
-      if (ev.ctrlKey && !ev.shiftKey && ev.code === 'KeyV') {
-        navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
-        return false;
-      }
-
-      // Paste: Ctrl+Shift+V
-      if (ev.ctrlKey && ev.shiftKey && ev.code === 'KeyV') {
-        navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
-        return false;
+      // Paste: Let xterm/browser handle Ctrl+V or Ctrl+Shift+V naturally.
+      // Returning true lets it pass to xterm's internal onData, avoiding double paste.
+      if (ev.ctrlKey && ev.code === 'KeyV') {
+        return true;
       }
 
       // Font zoom
@@ -291,14 +274,14 @@
     return true;
   });
 
-  // Right-click: copy selection if text selected, otherwise paste from clipboard
+  // Right-click: copy selection if text selected, otherwise paste via term.paste()
   document.getElementById('terminal').addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     const sel = term.getSelection();
     if (sel) {
       navigator.clipboard.writeText(sel).catch(() => {});
     } else {
-      navigator.clipboard.readText().then((t) => { if (t) ipcSend('pty-input', t); }).catch(() => {});
+      navigator.clipboard.readText().then((t) => { if (t) term.paste(t); }).catch(() => {});
     }
   });
 
